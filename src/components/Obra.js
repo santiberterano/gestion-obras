@@ -9,6 +9,7 @@ function Obra({ obra, perfil, onVolver }) {
 
   useEffect(() => {
     cargarDatos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function cargarDatos() {

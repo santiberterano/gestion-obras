@@ -1,6 +1,7 @@
 import { useState } from 'react'
 // import { supabase } from '../supabaseClient'
 import CostoPrevisto from './modulos/CostoPrevisto'
+import ExplosionInsumos from './modulos/ExplosionInsumos'
 
 function Obra({ obra, perfil, onVolver }) {
   const [seccion, setSeccion] = useState(null)
@@ -94,15 +95,12 @@ function Obra({ obra, perfil, onVolver }) {
         </div>
 
         {/* SECCIÓN ACTIVA */}
-        {seccion && (
-  <div style={{ marginTop: '24px', background: 'white', borderRadius: '10px', padding: '24px', border: '1px solid #e5e7eb' }}>
-    <h3 style={{ marginBottom: '16px' }}>{botones.find(b => b.id === seccion)?.label}</h3>
-    {seccion === 'costo_previsto'
-      ? <CostoPrevisto obra={obra} perfil={perfil} />
-      : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
-    }
-  </div>
-)}
+        {seccion === 'costo_previsto'
+  ? <CostoPrevisto obra={obra} perfil={perfil} />
+  : seccion === 'explosion_insumos'
+  ? <ExplosionInsumos obra={obra} perfil={perfil} />
+  : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
+}
       </div>
     </div>
   )

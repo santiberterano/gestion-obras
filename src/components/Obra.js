@@ -1,149 +1,109 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../supabaseClient'
+import CostoPrevisto from './modulos/CostoPrevisto'
 
 function Obra({ obra, perfil, onVolver }) {
-  const [tab, setTab] = useState('costo')
-  const [costos, setCostos] = useState([])
-  const [stock, setStock] = useState([])
-  const [pedidos, setPedidos] = useState([])
+  const [seccion, setSeccion] = useState(null)
 
-  useEffect(() => {
-    cargarDatos()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const botones = [
+    { id: 'costo_previsto', label: 'Costo Previsto' },
+    { id: 'costo_abierto', label: 'Costo Abierto' },
+    { id: 'costo_explotado', label: 'Costo Explotado' },
+    { id: 'explosion_insumos', label: 'Explosión de Insumos' },
+    { id: 'planilla_medicion', label: 'Planilla de Medición' },
+    { id: 'certificados', label: 'Certificados' },
+    { id: 'tareas_complementarias', label: 'Tareas Complementarias' },
+    { id: 'informes', label: 'Informes' },
+  ]
 
-  async function cargarDatos() {
-    const [c, s, p] = await Promise.all([
-      supabase.from('costo_previsto').select('*').eq('obra_id', obra.id),
-      supabase.from('stock').select('*').eq('obra_id', obra.id),
-      supabase.from('pedidos').select('*').eq('obra_id', obra.id),
-    ])
-    setCostos(c.data || [])
-    setStock(s.data || [])
-    setPedidos(p.data || [])
+  const formatMoney = (n) =>
+    n ? '$' + Number(n).toLocaleString('es-AR') : '-'
+
+  const estadoColor = {
+    activa: { bg: '#dcfce7', color: '#16a34a' },
+    finalizada: { bg: '#f3f4f6', color: '#666' },
+    pausada: { bg: '#fef9c3', color: '#ca8a04' },
   }
-
-  const puedeEditar = (modulo) => {
-    const permisos = {
-      costo: ['computo'],
-      stock: ['compras', 'produccion'],
-      pedidos: ['compras', 'jefe_obra'],
-    }
-    return permisos[modulo]?.includes(perfil.area)
-  }
-
-  const tabStyle = (t) => ({
-    padding: '10px 20px',
-    cursor: 'pointer',
-    border: 'none',
-    borderBottom: tab === t ? '3px solid #2563eb' : '3px solid transparent',
-    background: 'none',
-    fontWeight: tab === t ? 'bold' : 'normal',
-    color: tab === t ? '#2563eb' : '#666',
-  })
+  const estado = estadoColor[obra.estado] || { bg: '#f3f4f6', color: '#666' }
 
   return (
-    <div style={{ padding: '24px', maxWidth: '900px', margin: '0 auto' }}>
-      <button onClick={onVolver} style={{ marginBottom: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '14px' }}>
-        ← Volver a obras
-      </button>
-      <h2 style={{ marginBottom: '4px' }}>{obra.nombre}</h2>
-      <p style={{ color: '#666', marginBottom: '24px' }}>{obra.descripcion}</p>
+    <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
 
-      <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '24px' }}>
-        <button style={tabStyle('costo')} onClick={() => setTab('costo')}>Costo Previsto</button>
-        <button style={tabStyle('stock')} onClick={() => setTab('stock')}>Stock</button>
-        <button style={tabStyle('pedidos')} onClick={() => setTab('pedidos')}>Pedidos</button>
+      {/* HEADER FIJO */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+        background: 'white', borderBottom: '1px solid #e5e7eb',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        padding: '0 24px',
+        height: '56px',
+        display: 'flex', alignItems: 'center', gap: '24px'
+      }}>
+        <button
+          onClick={onVolver}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '14px', whiteSpace: 'nowrap', padding: '0' }}
+        >
+          ← Volver
+        </button>
+
+        <div style={{ width: '1px', height: '24px', background: '#e5e7eb' }} />
+
+        <span style={{ fontWeight: '700', color: '#111', whiteSpace: 'nowrap' }}>{obra.nombre}</span>
+
+        <div style={{ width: '1px', height: '24px', background: '#e5e7eb' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '13px', color: '#555', overflow: 'hidden' }}>
+          {obra.codigo && <span><span style={{ color: '#999' }}>Cód: </span><b>{obra.codigo}</b></span>}
+          {obra.version !== null && <span><span style={{ color: '#999' }}>V: </span><b>{obra.version}</b></span>}
+          {obra.mes_base && obra.anio_base && <span><span style={{ color: '#999' }}>Base: </span><b>{obra.mes_base} {obra.anio_base}</b></span>}
+          {obra.dolar && <span><span style={{ color: '#999' }}>U$S: </span><b>${Number(obra.dolar).toLocaleString('es-AR')}</b></span>}
+          {obra.costo_previsto_total && <span><span style={{ color: '#999' }}>CP: </span><b style={{ color: '#2563eb' }}>{formatMoney(obra.costo_previsto_total)}</b></span>}
+          <span style={{
+            padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
+            background: estado.bg, color: estado.color
+          }}>
+            {obra.estado ? obra.estado.charAt(0).toUpperCase() + obra.estado.slice(1) : '-'}
+          </span>
+        </div>
       </div>
 
-      {tab === 'costo' && (
-        <div>
-          <h3 style={{ marginBottom: '16px' }}>Costo Previsto {!puedeEditar('costo') && <span style={{ fontSize: '12px', color: '#999' }}>(solo lectura)</span>}</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f9fafb' }}>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Item</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Unidad</th>
-                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Cantidad</th>
-                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Precio Unit.</th>
-                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {costos.length === 0 && <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>Sin datos</td></tr>}
-              {costos.map(c => (
-                <tr key={c.id}>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{c.item}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{c.unidad}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>{c.cantidad}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>${c.precio_unitario}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>${c.total}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* CONTENIDO */}
+      <div style={{ paddingTop: '80px', padding: '80px 24px 24px', maxWidth: '960px', margin: '0 auto' }}>
 
-      {tab === 'stock' && (
-        <div>
-          <h3 style={{ marginBottom: '16px' }}>Stock Disponible {!puedeEditar('stock') && <span style={{ fontSize: '12px', color: '#999' }}>(solo lectura)</span>}</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f9fafb' }}>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Material</th>
-                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Cantidad</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Unidad</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stock.length === 0 && <tr><td colSpan={3} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>Sin datos</td></tr>}
-              {stock.map(s => (
-                <tr key={s.id}>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{s.material}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>{s.cantidad}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{s.unidad}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* BOTONES */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px', marginTop: '24px' }}>
+          {botones.map(b => (
+            <button
+              key={b.id}
+              onClick={() => setSeccion(b.id)}
+              style={{
+                padding: '24px 20px',
+                background: seccion === b.id ? '#2563eb' : 'white',
+                color: seccion === b.id ? 'white' : '#111',
+                border: '1px solid ' + (seccion === b.id ? '#2563eb' : '#e5e7eb'),
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '15px',
+                textAlign: 'left',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+              }}
+            >
+              {b.label}
+            </button>
+          ))}
         </div>
-      )}
 
-      {tab === 'pedidos' && (
-        <div>
-          <h3 style={{ marginBottom: '16px' }}>Lista de Pedidos {!puedeEditar('pedidos') && <span style={{ fontSize: '12px', color: '#999' }}>(solo lectura)</span>}</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f9fafb' }}>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Material</th>
-                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Cantidad</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Unidad</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pedidos.length === 0 && <tr><td colSpan={4} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>Sin datos</td></tr>}
-              {pedidos.map(p => (
-                <tr key={p.id}>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{p.material}</td>
-                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>{p.cantidad}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{p.unidad}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    <span style={{
-                      padding: '4px 10px', borderRadius: '20px', fontSize: '12px',
-                      background: p.estado === 'recibido' ? '#dcfce7' : p.estado === 'enviado' ? '#fef9c3' : '#f3f4f6',
-                      color: p.estado === 'recibido' ? '#16a34a' : p.estado === 'enviado' ? '#ca8a04' : '#666'
-                    }}>
-                      {p.estado}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {/* SECCIÓN ACTIVA */}
+        {seccion && (
+  <div style={{ marginTop: '24px', background: 'white', borderRadius: '10px', padding: '24px', border: '1px solid #e5e7eb' }}>
+    <h3 style={{ marginBottom: '16px' }}>{botones.find(b => b.id === seccion)?.label}</h3>
+    {seccion === 'costo_previsto'
+      ? <CostoPrevisto obra={obra} perfil={perfil} />
+      : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
+    }
+  </div>
+)}
+      </div>
     </div>
   )
 }

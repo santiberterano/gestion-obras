@@ -14,8 +14,9 @@ function CostoPrevisto({ obra, perfil }) {
   const esAdmin = perfil?.area === 'administracion'
 
   useEffect(() => {
-    cargarDatos()
-  }, [obra.id])
+  cargarDatos()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [obra.id])
 
   async function cargarDatos() {
     setCargando(true)

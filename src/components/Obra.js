@@ -2,6 +2,7 @@ import { useState } from 'react'
 // import { supabase } from '../supabaseClient'
 import CostoPrevisto from './modulos/CostoPrevisto'
 import ExplosionInsumos from './modulos/ExplosionInsumos'
+import CostoExplotado from './modulos/CostoExplotado'
 
 function Obra({ obra, perfil, onVolver }) {
   const [seccion, setSeccion] = useState(null)
@@ -99,6 +100,8 @@ function Obra({ obra, perfil, onVolver }) {
   ? <CostoPrevisto obra={obra} perfil={perfil} />
   : seccion === 'explosion_insumos'
   ? <ExplosionInsumos obra={obra} perfil={perfil} />
+  : seccion === 'costo_explotado'
+  ? <CostoExplotado obra={obra} perfil={perfil} />
   : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
 }
       </div>

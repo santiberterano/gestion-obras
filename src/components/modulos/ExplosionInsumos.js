@@ -73,10 +73,17 @@ function ExplosionInsumos({ obra, perfil }) {
   async function cambiarEstado(solicitudId, nuevoEstado) {
     setError(null)
     try {
+      // Obtener solicitud actual para verificar stock_descontado
+      const { data: solActual } = await supabase
+        .from('solicitudes')
+        .select('stock_descontado')
+        .eq('id', solicitudId)
+        .single()
+
       await supabase.from('solicitudes').update({ estado: nuevoEstado }).eq('id', solicitudId)
 
-      // Si se marca como entregada, descontar stock automáticamente
-      if (nuevoEstado === 'entregada') {
+      // Descontar stock solo al aprobar y solo si no fue descontado antes
+      if (nuevoEstado === 'aprobada' && !solActual?.stock_descontado) {
         const { data: items } = await supabase
           .from('solicitud_items')
           .select('*')
@@ -308,9 +315,11 @@ function ExplosionInsumos({ obra, perfil }) {
   const insumos   = filas.filter(f => f.tipo === 'item')
 
   const estadoColor = {
-    pendiente: { bg: '#fef9c3', color: '#ca8a04' },
-    aprobada:  { bg: '#dbeafe', color: '#2563eb' },
-    entregada: { bg: '#dcfce7', color: '#16a34a' },
+    pendiente:          { bg: '#fef9c3', color: '#ca8a04' },
+    aprobada:           { bg: '#dbeafe', color: '#2563eb' },
+    'entrega parcial':  { bg: '#fef3c7', color: '#d97706' },
+    entregada:          { bg: '#dcfce7', color: '#16a34a' },
+    rechazada:          { bg: '#fee2e2', color: '#dc2626' },
   }
 
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
@@ -433,23 +442,35 @@ function ExplosionInsumos({ obra, perfil }) {
                   <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
                   <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
                   {/* Botones de cambio de estado */}
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {s.estado === 'pendiente' && (
-                      <button onClick={() => cambiarEstado(s.id, 'aprobada')}
-                        style={{ padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                        Aprobar
-                      </button>
+                      <>
+                        <button onClick={() => cambiarEstado(s.id, 'aprobada')}
+                          style={{ padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          Aprobar
+                        </button>
+                        <button onClick={() => cambiarEstado(s.id, 'rechazada')}
+                          style={{ padding: '4px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          Rechazar
+                        </button>
+                      </>
                     )}
                     {s.estado === 'aprobada' && (
+                      <>
+                        <button onClick={() => cambiarEstado(s.id, 'entrega parcial')}
+                          style={{ padding: '4px 12px', background: '#d97706', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          Entrega Parcial
+                        </button>
+                        <button onClick={() => cambiarEstado(s.id, 'entregada')}
+                          style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          Entregada
+                        </button>
+                      </>
+                    )}
+                    {s.estado === 'entrega parcial' && (
                       <button onClick={() => cambiarEstado(s.id, 'entregada')}
                         style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                        Marcar Entregada
-                      </button>
-                    )}
-                    {s.estado === 'pendiente' && (
-                      <button onClick={() => cambiarEstado(s.id, 'rechazada')}
-                        style={{ padding: '4px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                        Rechazar
+                        Entregada
                       </button>
                     )}
                   </div>

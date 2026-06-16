@@ -442,7 +442,7 @@ function ExplosionInsumos({ obra, perfil }) {
                   <span style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '15px' }}>SC-{String(s.numero).padStart(3, '0')}</span>
                   <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
                   <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
-                  {/* Botones de cambio de estado */}
+                  {/* Botones de cambio de estado - solo compras */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {s.estado === 'pendiente' && (
                       <>
@@ -455,24 +455,6 @@ function ExplosionInsumos({ obra, perfil }) {
                           Rechazar
                         </button>
                       </>
-                    )}
-                    {s.estado === 'aprobada' && (
-                      <>
-                        <button onClick={() => cambiarEstado(s.id, 'entrega parcial')}
-                          style={{ padding: '4px 12px', background: '#d97706', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                          Entrega Parcial
-                        </button>
-                        <button onClick={() => cambiarEstado(s.id, 'entregada')}
-                          style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                          Entregada
-                        </button>
-                      </>
-                    )}
-                    {s.estado === 'entrega parcial' && (
-                      <button onClick={() => cambiarEstado(s.id, 'entregada')}
-                        style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                        Entregada
-                      </button>
                     )}
                   </div>
                 </div>
@@ -534,10 +516,33 @@ function ExplosionInsumos({ obra, perfil }) {
             const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: '#666' }
             return (
               <div key={s.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                   <span style={{ fontWeight: '700', color: '#1e3a5f' }}>SC-{String(s.numero).padStart(3, '0')}</span>
                   <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
                   <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
+                  {/* Botones de entrega - solo jefe de obra */}
+                  {esJefe && (
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {s.estado === 'aprobada' && (
+                        <>
+                          <button onClick={() => cambiarEstado(s.id, 'entrega parcial')}
+                            style={{ padding: '4px 12px', background: '#d97706', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                            Entrega Parcial
+                          </button>
+                          <button onClick={() => cambiarEstado(s.id, 'entregada')}
+                            style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                            Entregada
+                          </button>
+                        </>
+                      )}
+                      {s.estado === 'entrega parcial' && (
+                        <button onClick={() => cambiarEstado(s.id, 'entregada')}
+                          style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          Entregada
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {s.solicitud_items?.map(it => (
                   <div key={it.id} style={{ fontSize: '13px', color: '#555', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>

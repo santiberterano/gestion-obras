@@ -422,10 +422,41 @@ function ExplosionInsumos({ obra, perfil }) {
         </div>
       )}
 
-      {/* Vista Stock — por ahora igual a la tabla pero con label */}
+      {/* Vista Stock */}
       {vistaJefe === 'stock' && (
-        <div style={{ marginBottom: '24px', padding: '12px 16px', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: '8px', fontSize: '13px', color: '#92400e' }}>
-          📦 El stock disponible se calculará automáticamente cuando haya pedidos entregados. Por ahora muestra las cantidades originales de la explosión.
+        <div style={{ marginBottom: '24px' }}>
+          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Stock Disponible</h4>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                  {['Descripción', 'Unid.', 'Cant. Original', 'Cant. Pedida', 'Disponible'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Descripción' ? 'left' : 'right', fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {insumos.map((f, fi) => {
+                  const pedida     = f.cantidad_pedida || 0
+                  const disponible = (f.cantidad || 0) - pedida
+                  return (
+                    <tr key={fi} style={{
+                      background: fi % 2 === 0 ? '#ffffff' : '#f9fafb',
+                      borderBottom: '1px solid #f1f5f9'
+                    }}>
+                      <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{f.unidad}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{Number(f.cantidad || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', color: pedida > 0 ? '#dc2626' : '#888' }}>{Number(pedida).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: disponible < 0 ? '#dc2626' : disponible === 0 ? '#ca8a04' : '#16a34a' }}>
+                        {Number(disponible).toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

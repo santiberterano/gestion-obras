@@ -213,12 +213,13 @@ function ExplosionInsumos({ obra, perfil }) {
       if (solError) throw new Error('Error creando solicitud')
 
       const items = pedidoItems.map(p => ({
-        solicitud_id: solicitud.id,
-        descripcion: p.descripcion,
-        unidad: p.unidad || '',
-        cantidad: parseFloat(p.cantidad) || 1,
-        es_otro: p.es_otro,
-      }))
+  solicitud_id: solicitud.id,
+  descripcion: p.descripcion,
+  unidad: p.unidad || '',
+  cantidad: parseFloat(p.cantidad) || 1,
+  es_otro: p.es_otro,
+  explosion_item_id: p.es_otro ? null : p.explosion_item_id,
+}))
       await supabase.from('solicitud_items').insert(items)
 
       setPedidoItems([])

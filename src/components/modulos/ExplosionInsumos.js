@@ -61,6 +61,35 @@ function ExplosionInsumos({ obra, perfil }) {
     setHistorial(data || [])
   }
 
+  function descargarExcel() {
+    const wb = XLSX.utils.book_new()
+    const filasTitulo = [
+      [`SOLICITUDES DE COMPRA — ${meta?.nombre_obra || obra.nombre}`],
+      [`Proyecto: ${meta?.proyecto || ''} | Exportado: ${new Date().toLocaleDateString('es-AR')}`],
+      [],
+      ['N° SC', 'Fecha', 'Estado', 'Descripción Ítem', 'Unidad', 'Cantidad', 'No Previsto', 'Observaciones'],
+    ]
+    const filasData = []
+    for (const s of historial) {
+      for (const it of s.solicitud_items || []) {
+        filasData.push([
+          s.numero,
+          new Date(s.created_at).toLocaleDateString('es-AR'),
+          s.estado,
+          it.descripcion,
+          it.unidad,
+          it.cantidad,
+          it.es_otro ? 'Sí' : 'No',
+          s.observaciones || '',
+        ])
+      }
+    }
+    const ws = XLSX.utils.aoa_to_sheet([...filasTitulo, ...filasData])
+    ws['!cols'] = [8, 12, 15, 45, 10, 12, 13, 35].map(w => ({ wch: w }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Solicitudes')
+    XLSX.writeFile(wb, `SC_${obra.nombre.replace(/\s+/g, '_')}.xlsx`)
+  }
+
   async function cargarSolicitudes() {
     const { data } = await supabase
       .from('solicitudes')
@@ -509,7 +538,13 @@ function ExplosionInsumos({ obra, perfil }) {
       {/* Vista Historial (jefe y compras) */}
       {(vistaJefe === 'historial' || vistaCompras === 'historial') && (
         <div style={{ marginBottom: '24px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Historial de Solicitudes</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h4 style={{ margin: 0, color: '#1e3a5f' }}>Historial de Solicitudes</h4>
+            <button onClick={descargarExcel}
+              style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+              ⬇ Descargar Excel
+            </button>
+          </div>
           {historial.length === 0 ? (
             <p style={{ color: '#aaa' }}>No hay solicitudes aún.</p>
           ) : historial.map(s => {

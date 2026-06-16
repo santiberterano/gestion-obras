@@ -159,17 +159,18 @@ function ExplosionInsumos({ obra, perfil }) {
   }
 
   function agregarItemPedido(insumo) {
-    const existe = pedidoItems.find(p => p.insumo_id === insumo.id)
-    if (existe) return
-    setPedidoItems(prev => [...prev, {
-      insumo_id: insumo.id,
-      descripcion: insumo.descripcion,
-      unidad: insumo.unidad,
-      cantidad_max: insumo.cantidad,
-      cantidad: 1,
-      es_otro: false,
-    }])
-  }
+  const existe = pedidoItems.find(p => p.insumo_id === insumo.id)
+  if (existe) return
+  setPedidoItems(prev => [...prev, {
+    insumo_id: insumo.id,
+    explosion_item_id: insumo.id,
+    descripcion: insumo.descripcion,
+    unidad: insumo.unidad,
+    cantidad_max: insumo.cantidad,
+    cantidad: 1,
+    es_otro: false,
+  }])
+}
 
   function actualizarCantidad(insumo_id, valor) {
     setPedidoItems(prev => prev.map(p =>

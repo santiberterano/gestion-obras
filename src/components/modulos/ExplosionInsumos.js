@@ -110,6 +110,7 @@ function ExplosionInsumos({ obra, perfil }) {
       }
 
       await cargarSolicitudes()
+      await cargarDatos()
       setExito('Estado actualizado correctamente.')
     } catch (err) {
       setError('Error al actualizar estado.')

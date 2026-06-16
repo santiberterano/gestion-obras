@@ -9,15 +9,18 @@ function ExplosionInsumos({ obra, perfil }) {
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState(null)
   const [exito, setExito] = useState(null)
-  const [vistaJefe, setVistaJefe] = useState(null) // 'pedido' | 'stock' | 'historial'
+  const [vistaJefe, setVistaJefe] = useState(null)
+  const [vistaCompras, setVistaCompras] = useState(null)
   const [pedidoItems, setPedidoItems] = useState([])
   const [observaciones, setObservaciones] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [historial, setHistorial] = useState([])
+  const [solicitudes, setSolicitudes] = useState([])
   const inputRef = useRef()
 
   const esAdmin   = perfil?.area === 'administracion'
   const esJefe    = perfil?.area === 'jefe_obra'
+  const esCompras = perfil?.area === 'compras'
 
   useEffect(() => {
     cargarDatos()
@@ -58,6 +61,54 @@ function ExplosionInsumos({ obra, perfil }) {
     setHistorial(data || [])
   }
 
+  async function cargarSolicitudes() {
+    const { data } = await supabase
+      .from('solicitudes')
+      .select('*, solicitud_items(*)')
+      .eq('obra_id', obra.id)
+      .order('numero', { ascending: true })
+    setSolicitudes(data || [])
+  }
+
+  async function cambiarEstado(solicitudId, nuevoEstado) {
+    setError(null)
+    try {
+      await supabase.from('solicitudes').update({ estado: nuevoEstado }).eq('id', solicitudId)
+
+      // Si se marca como entregada, descontar stock automáticamente
+      if (nuevoEstado === 'entregada') {
+        const { data: items } = await supabase
+          .from('solicitud_items')
+          .select('*')
+          .eq('solicitud_id', solicitudId)
+
+        for (const item of items || []) {
+          if (item.explosion_item_id) {
+            const { data: insumo } = await supabase
+              .from('explosion_insumos')
+              .select('cantidad_pedida')
+              .eq('id', item.explosion_item_id)
+              .single()
+            if (insumo) {
+              await supabase
+                .from('explosion_insumos')
+                .update({ cantidad_pedida: (insumo.cantidad_pedida || 0) + item.cantidad })
+                .eq('id', item.explosion_item_id)
+            }
+          }
+        }
+
+        await supabase.from('solicitudes').update({ stock_descontado: true }).eq('id', solicitudId)
+        await cargarDatos()
+      }
+
+      await cargarSolicitudes()
+      setExito('Estado actualizado correctamente.')
+    } catch (err) {
+      setError('Error al actualizar estado.')
+    }
+  }
+
   async function handleArchivo(e) {
     const archivo = e.target.files[0]
     if (!archivo) return
@@ -80,7 +131,6 @@ function ExplosionInsumos({ obra, perfil }) {
 
       for (let i = 11; i < rows.length; i++) {
         const r = rows[i]
-
         const descripcion     = String(r[1] || '').trim()
         const unidad          = String(r[2] || '').trim()
         const precio_unitario = parseFloat(r[3]) || null
@@ -159,18 +209,18 @@ function ExplosionInsumos({ obra, perfil }) {
   }
 
   function agregarItemPedido(insumo) {
-  const existe = pedidoItems.find(p => p.insumo_id === insumo.id)
-  if (existe) return
-  setPedidoItems(prev => [...prev, {
-    insumo_id: insumo.id,
-    explosion_item_id: insumo.id,
-    descripcion: insumo.descripcion,
-    unidad: insumo.unidad,
-    cantidad_max: insumo.cantidad,
-    cantidad: 1,
-    es_otro: false,
-  }])
-}
+    const existe = pedidoItems.find(p => p.insumo_id === insumo.id)
+    if (existe) return
+    setPedidoItems(prev => [...prev, {
+      insumo_id: insumo.id,
+      explosion_item_id: insumo.id,
+      descripcion: insumo.descripcion,
+      unidad: insumo.unidad,
+      cantidad_max: insumo.cantidad,
+      cantidad: 1,
+      es_otro: false,
+    }])
+  }
 
   function actualizarCantidad(insumo_id, valor) {
     setPedidoItems(prev => prev.map(p =>
@@ -185,6 +235,7 @@ function ExplosionInsumos({ obra, perfil }) {
   function agregarOtro() {
     setPedidoItems(prev => [...prev, {
       insumo_id: 'otro-' + Date.now(),
+      explosion_item_id: null,
       descripcion: '',
       unidad: '',
       cantidad: 1,
@@ -196,7 +247,6 @@ function ExplosionInsumos({ obra, perfil }) {
     if (pedidoItems.length === 0) return
     setEnviando(true)
     try {
-      // Número correlativo
       const { data: ultimas } = await supabase
         .from('solicitudes').select('numero')
         .eq('obra_id', obra.id).order('numero', { ascending: false }).limit(1)
@@ -213,13 +263,13 @@ function ExplosionInsumos({ obra, perfil }) {
       if (solError) throw new Error('Error creando solicitud')
 
       const items = pedidoItems.map(p => ({
-  solicitud_id: solicitud.id,
-  descripcion: p.descripcion,
-  unidad: p.unidad || '',
-  cantidad: parseFloat(p.cantidad) || 1,
-  es_otro: p.es_otro,
-  explosion_item_id: p.es_otro ? null : p.explosion_item_id,
-}))
+        solicitud_id: solicitud.id,
+        descripcion: p.descripcion,
+        unidad: p.unidad || '',
+        cantidad: parseFloat(p.cantidad) || 1,
+        es_otro: p.es_otro,
+        explosion_item_id: p.es_otro ? null : p.explosion_item_id,
+      }))
       await supabase.from('solicitud_items').insert(items)
 
       setPedidoItems([])
@@ -257,6 +307,12 @@ function ExplosionInsumos({ obra, perfil }) {
   const grupos    = agrupar(filas)
   const insumos   = filas.filter(f => f.tipo === 'item')
 
+  const estadoColor = {
+    pendiente: { bg: '#fef9c3', color: '#ca8a04' },
+    aprobada:  { bg: '#dbeafe', color: '#2563eb' },
+    entregada: { bg: '#dcfce7', color: '#16a34a' },
+  }
+
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
 
   return (
@@ -291,141 +347,128 @@ function ExplosionInsumos({ obra, perfil }) {
       {/* Botones jefe de obra */}
       {esJefe && filas.length > 0 && (
         <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => { setVistaJefe(vistaJefe === 'pedido' ? null : 'pedido') }}
-            style={{ padding: '10px 20px', background: vistaJefe === 'pedido' ? '#2563eb' : 'white', color: vistaJefe === 'pedido' ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-            🛒 Cargar Pedido
-          </button>
-          <button
-            onClick={() => setVistaJefe(vistaJefe === 'stock' ? null : 'stock')}
-            style={{ padding: '10px 20px', background: vistaJefe === 'stock' ? '#2563eb' : 'white', color: vistaJefe === 'stock' ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-            📦 Ver Stock
-          </button>
-          <button
-            onClick={() => { setVistaJefe(vistaJefe === 'historial' ? null : 'historial'); cargarHistorial() }}
-            style={{ padding: '10px 20px', background: vistaJefe === 'historial' ? '#2563eb' : 'white', color: vistaJefe === 'historial' ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-            📋 Historial de Pedidos
-          </button>
+          {['pedido', 'stock', 'historial'].map((v, i) => (
+            <button key={v}
+              onClick={() => { setVistaJefe(vistaJefe === v ? null : v); if (v === 'historial') cargarHistorial() }}
+              style={{ padding: '10px 20px', background: vistaJefe === v ? '#2563eb' : 'white', color: vistaJefe === v ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+              {['🛒 Cargar Pedido', '📦 Ver Stock', '📋 Historial'][i]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Botones compras */}
+      {esCompras && filas.length > 0 && (
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {['gestionar', 'stock', 'historial'].map((v, i) => (
+            <button key={v}
+              onClick={() => { setVistaCompras(vistaCompras === v ? null : v); if (v === 'historial') cargarHistorial(); if (v === 'gestionar') cargarSolicitudes() }}
+              style={{ padding: '10px 20px', background: vistaCompras === v ? '#2563eb' : 'white', color: vistaCompras === v ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+              {['📋 Gestionar Solicitudes', '📦 Ver Stock', '🗂 Historial'][i]}
+            </button>
+          ))}
         </div>
       )}
 
       {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
       {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
 
-      {/* Vista Cargar Pedido */}
-      {vistaJefe === 'pedido' && (
+      {/* Vista Cargar Pedido (jefe) */}
+      {esJefe && vistaJefe === 'pedido' && (
         <div style={{ marginBottom: '24px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
           <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Nueva Solicitud de Compra</h4>
-
-          {/* Items seleccionados */}
           {pedidoItems.length > 0 && (
             <div style={{ marginBottom: '16px' }}>
               {pedidoItems.map((p, i) => (
                 <div key={p.insumo_id} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                   {p.es_otro ? (
                     <>
-                      <input
-                        placeholder="Descripción del insumo"
-                        value={p.descripcion}
+                      <input placeholder="Descripción" value={p.descripcion}
                         onChange={ev => setPedidoItems(prev => prev.map((x, xi) => xi === i ? { ...x, descripcion: ev.target.value } : x))}
-                        style={{ flex: 2, padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }}
-                      />
-                      <input
-                        placeholder="Unidad"
-                        value={p.unidad}
+                        style={{ flex: 2, padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }} />
+                      <input placeholder="Unidad" value={p.unidad}
                         onChange={ev => setPedidoItems(prev => prev.map((x, xi) => xi === i ? { ...x, unidad: ev.target.value } : x))}
-                        style={{ width: '70px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }}
-                      />
+                        style={{ width: '70px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }} />
                     </>
                   ) : (
                     <span style={{ flex: 2, fontSize: '13px' }}>{p.descripcion} <span style={{ color: '#888' }}>({p.unidad})</span></span>
                   )}
-                  <input
-                    type="number"
-                    min="0.01"
-                    max={p.cantidad_max || undefined}
-                    value={p.cantidad}
+                  <input type="number" min="0.01" max={p.cantidad_max || undefined} value={p.cantidad}
                     onChange={ev => actualizarCantidad(p.insumo_id, ev.target.value)}
-                    style={{ width: '80px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', textAlign: 'right' }}
-                  />
+                    style={{ width: '80px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', textAlign: 'right' }} />
                   <button onClick={() => quitarItem(p.insumo_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>✕</button>
                 </div>
               ))}
             </div>
           )}
-
-          {/* Selector de insumos */}
-          <div style={{ marginBottom: '12px' }}>
-            <select
-              onChange={ev => {
-                const ins = insumos.find(f => f.id === parseInt(ev.target.value))
-                if (ins) agregarItemPedido(ins)
-                ev.target.value = ''
-              }}
-              defaultValue=""
-              style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', marginBottom: '8px' }}
-            >
-              <option value="">+ Agregar insumo de la explosión...</option>
-              {insumos.map(f => (
-                <option key={f.id} value={f.id}>{f.descripcion} ({f.unidad})</option>
-              ))}
-            </select>
-            <button
-              onClick={agregarOtro}
-              style={{ padding: '7px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', color: '#555' }}>
-              + Agregar otro (no previsto)
-            </button>
-          </div>
-
-          {/* Observaciones */}
-          <textarea
-            placeholder="Observaciones (opcional)"
-            value={observaciones}
-            onChange={ev => setObservaciones(ev.target.value)}
-            rows={2}
-            style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', marginBottom: '12px', boxSizing: 'border-box', resize: 'vertical' }}
-          />
-
-          <button
-            onClick={enviarPedido}
-            disabled={pedidoItems.length === 0 || enviando}
+          <select onChange={ev => { const ins = insumos.find(f => f.id === parseInt(ev.target.value)); if (ins) agregarItemPedido(ins); ev.target.value = '' }} defaultValue=""
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', marginBottom: '8px' }}>
+            <option value="">+ Agregar insumo de la explosión...</option>
+            {insumos.map(f => <option key={f.id} value={f.id}>{f.descripcion} ({f.unidad})</option>)}
+          </select>
+          <button onClick={agregarOtro} style={{ padding: '7px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', color: '#555', marginBottom: '12px' }}>
+            + Agregar otro (no previsto)
+          </button>
+          <textarea placeholder="Observaciones (opcional)" value={observaciones} onChange={ev => setObservaciones(ev.target.value)} rows={2}
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', marginBottom: '12px', boxSizing: 'border-box', resize: 'vertical' }} />
+          <button onClick={enviarPedido} disabled={pedidoItems.length === 0 || enviando}
             style={{ padding: '10px 24px', background: pedidoItems.length === 0 ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: pedidoItems.length === 0 ? 'not-allowed' : 'pointer' }}>
             {enviando ? 'Enviando...' : 'Enviar Solicitud'}
           </button>
         </div>
       )}
 
-      {/* Vista Historial */}
-      {vistaJefe === 'historial' && (
+      {/* Vista Gestionar Solicitudes (compras) */}
+      {esCompras && vistaCompras === 'gestionar' && (
         <div style={{ marginBottom: '24px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Historial de Solicitudes</h4>
-          {historial.length === 0 ? (
+          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Solicitudes de Compra</h4>
+          {solicitudes.length === 0 ? (
             <p style={{ color: '#aaa' }}>No hay solicitudes aún.</p>
-          ) : historial.map(s => (
-            <div key={s.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontWeight: '700', color: '#1e3a5f' }}>SC-{String(s.numero).padStart(3, '0')}</span>
-                <span style={{
-                  padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
-                  background: s.estado === 'pendiente' ? '#fef9c3' : s.estado === 'aprobada' ? '#dcfce7' : '#f0fdf4',
-                  color: s.estado === 'pendiente' ? '#ca8a04' : s.estado === 'aprobada' ? '#16a34a' : '#666'
-                }}>{s.estado}</span>
-                <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
-              </div>
-              {s.solicitud_items?.map(it => (
-                <div key={it.id} style={{ fontSize: '13px', color: '#555', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
-                  {it.descripcion} — <b>{it.cantidad} {it.unidad}</b>
-                  {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#2563eb' }}>no previsto</span>}
+          ) : solicitudes.map(s => {
+            const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: '#666' }
+            return (
+              <div key={s.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <span style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '15px' }}>SC-{String(s.numero).padStart(3, '0')}</span>
+                  <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
+                  <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
+                  {/* Botones de cambio de estado */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {s.estado === 'pendiente' && (
+                      <button onClick={() => cambiarEstado(s.id, 'aprobada')}
+                        style={{ padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                        Aprobar
+                      </button>
+                    )}
+                    {s.estado === 'aprobada' && (
+                      <button onClick={() => cambiarEstado(s.id, 'entregada')}
+                        style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                        Marcar Entregada
+                      </button>
+                    )}
+                    {s.estado === 'pendiente' && (
+                      <button onClick={() => cambiarEstado(s.id, 'rechazada')}
+                        style={{ padding: '4px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                        Rechazar
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))}
-              {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#888' }}>Obs: {s.observaciones}</p>}
-            </div>
-          ))}
+                {s.solicitud_items?.map(it => (
+                  <div key={it.id} style={{ fontSize: '13px', color: '#555', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    {it.descripcion} — <b>{it.cantidad} {it.unidad}</b>
+                    {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#2563eb' }}>no previsto</span>}
+                  </div>
+                ))}
+                {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#888' }}>Obs: {s.observaciones}</p>}
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* Vista Stock */}
-      {vistaJefe === 'stock' && (
+      {/* Vista Stock (jefe y compras) */}
+      {(vistaJefe === 'stock' || vistaCompras === 'stock') && (
         <div style={{ marginBottom: '24px' }}>
           <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Stock Disponible</h4>
           <div style={{ overflowX: 'auto' }}>
@@ -442,10 +485,7 @@ function ExplosionInsumos({ obra, perfil }) {
                   const pedida     = f.cantidad_pedida || 0
                   const disponible = (f.cantidad || 0) - pedida
                   return (
-                    <tr key={fi} style={{
-                      background: fi % 2 === 0 ? '#ffffff' : '#f9fafb',
-                      borderBottom: '1px solid #f1f5f9'
-                    }}>
+                    <tr key={fi} style={{ background: fi % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
                       <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{f.unidad}</td>
                       <td style={{ padding: '7px 12px', textAlign: 'right' }}>{Number(f.cantidad || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</td>
@@ -459,6 +499,34 @@ function ExplosionInsumos({ obra, perfil }) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Vista Historial (jefe y compras) */}
+      {(vistaJefe === 'historial' || vistaCompras === 'historial') && (
+        <div style={{ marginBottom: '24px' }}>
+          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Historial de Solicitudes</h4>
+          {historial.length === 0 ? (
+            <p style={{ color: '#aaa' }}>No hay solicitudes aún.</p>
+          ) : historial.map(s => {
+            const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: '#666' }
+            return (
+              <div key={s.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: '700', color: '#1e3a5f' }}>SC-{String(s.numero).padStart(3, '0')}</span>
+                  <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
+                  <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
+                </div>
+                {s.solicitud_items?.map(it => (
+                  <div key={it.id} style={{ fontSize: '13px', color: '#555', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    {it.descripcion} — <b>{it.cantidad} {it.unidad}</b>
+                    {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#2563eb' }}>no previsto</span>}
+                  </div>
+                ))}
+                {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#888' }}>Obs: {s.observaciones}</p>}
+              </div>
+            )
+          })}
         </div>
       )}
 

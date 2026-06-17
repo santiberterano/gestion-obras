@@ -1,5 +1,4 @@
 import { useState } from 'react'
-// import { supabase } from '../supabaseClient'
 import CostoPrevisto from './modulos/CostoPrevisto'
 import ExplosionInsumos from './modulos/ExplosionInsumos'
 import CostoExplotado from './modulos/CostoExplotado'
@@ -22,9 +21,9 @@ function Obra({ obra, perfil, onVolver }) {
     n ? '$' + Number(n).toLocaleString('es-AR') : '-'
 
   const estadoColor = {
-    activa: { bg: '#dcfce7', color: '#16a34a' },
+    activa:     { bg: '#dcfce7', color: '#16a34a' },
     finalizada: { bg: '#f3f4f6', color: '#666' },
-    pausada: { bg: '#fef9c3', color: '#ca8a04' },
+    pausada:    { bg: '#fef9c3', color: '#ca8a04' },
   }
   const estado = estadoColor[obra.estado] || { bg: '#f3f4f6', color: '#666' }
 
@@ -96,14 +95,19 @@ function Obra({ obra, perfil, onVolver }) {
         </div>
 
         {/* SECCIÓN ACTIVA */}
-        {seccion === 'costo_previsto'
-  ? <CostoPrevisto obra={obra} perfil={perfil} />
-  : seccion === 'explosion_insumos'
-  ? <ExplosionInsumos obra={obra} perfil={perfil} />
-  : seccion === 'costo_explotado'
-  ? <CostoExplotado obra={obra} perfil={perfil} />
-  : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
-}
+        {seccion && (
+          <div style={{ marginTop: '24px', background: 'white', borderRadius: '10px', padding: '24px', border: '1px solid #e5e7eb' }}>
+            <h3 style={{ marginBottom: '16px' }}>{botones.find(b => b.id === seccion)?.label}</h3>
+            {seccion === 'costo_previsto'
+              ? <CostoPrevisto obra={obra} perfil={perfil} />
+              : seccion === 'explosion_insumos'
+              ? <ExplosionInsumos obra={obra} perfil={perfil} />
+              : seccion === 'costo_explotado'
+              ? <CostoExplotado obra={obra} perfil={perfil} />
+              : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
+            }
+          </div>
+        )}
       </div>
     </div>
   )

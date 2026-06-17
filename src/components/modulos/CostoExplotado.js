@@ -53,75 +53,142 @@ function CostoExplotado({ obra, perfil }) {
       const buffer = await archivo.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null })
 
-      // Metadatos
+      // Metadatos — col A (índice 0), filas 2-4
       const proyecto    = String(rows[1]?.[0] || '').trim()
       const nombre_obra = String(rows[2]?.[0] || '').trim()
       const fecha       = String(rows[3]?.[0] || '').trim() || null
 
+      const CATEGORIAS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'DIRECTOS FIJOS', 'EQUIPOS', 'SUBCONTRATOS', 'ANALISIS']
+
       const filasParsed = []
       let orden = 0
       let itemActual = null
+      let codigoActual = null
       let categoriaActual = null
 
-      const CATEGORIAS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'DIRECTOS FIJOS', 'EQUIPOS', 'SUBCONTRATOS', 'ANALISIS']
-
       for (let i = 9; i < rows.length; i++) {
-        const r = rows[i]
-        const colB = String(r[1] || '').trim()
-        const colC = String(r[2] || '').trim()
-        const colD = String(r[3] || '').trim()
-        const colE = parseFloat(r[4]) || null
-        const colF = parseFloat(r[5]) || null
-        const colG = parseFloat(r[6]) || null
+        const r = rows[i] || []
 
-        if (!colB && !colC && !colE && !colF && !colG) continue
+        // Col A(0) vacía, B(1)=código ítem, C(2)=descripción, D(3)=unidad, E(4)=precio, F(5)=cantidad, G(6)=total(fórmula)
+        const colB = r[1]
+        const colC = r[2] != null ? String(r[2]).trim() : ''
+        const colD = r[3] != null ? String(r[3]).trim() : ''
+        const colE = typeof r[4] === 'number' ? r[4] : null
+        const colF = typeof r[5] === 'number' ? r[5] : null
 
-        // Ítem: tiene código en col B (ej: 0.1, 1.2)
-        const esItem = colB && /^\d+\.\d+/.test(colB) && colC
+        // Saltar filas completamente vacías
+        if (!colB && !colC && !colE && !colF) continue
 
-        // Categoría: texto en mayúsculas en col C, sin valores numéricos
-        const esCategoria = !colB && colC && CATEGORIAS.some(cat => colC.trim().toUpperCase().startsWith(cat)) && !colE && !colF
+        // Saltar fila encabezado de columnas (tiene P.Un o Can.)
+        if (colD.includes('P.Un') || colC.includes('P.Un') || colD.includes('Can.')) continue
 
-        // Subtotal: sin descripción, solo valor en col G
-        const esSubtotal = !colB && !colC && !colD && !colE && !colF && colG
+        // Detectar ítem: col B es número (0.1, 0.3...)
+        const esItem = colB !== null && typeof colB === 'number' && colC
 
-        // Costo-Costo: col C dice "Costo-Costo"
-        const esCostoCosto = colC.toLowerCase().includes('costo-costo') || colC.toLowerCase().includes('costo costo')
+        // Detectar categoría: col C en mayúsculas, sin precio ni cantidad
+        const colCUpper = colC.toUpperCase()
+        const esCategoria = !colB && colC && CATEGORIAS.some(cat => colCUpper.startsWith(cat)) && colE === null && colF === null
 
-        // Encabezado de columnas (P.Un, Can, etc.)
-        const esEncabezado = colD.includes('P.Un') || colC.includes('P.Un')
+        // Detectar Costo-Costo
+        const esCostoCosto = !colB && colCUpper.includes('COSTO-COSTO') || colCUpper.includes('COSTO COSTO')
 
-        if (esEncabezado) continue
+        // Detectar subtotal: sin descripción, sin precio, sin cantidad (fila de SUM)
+        const esSubtotal = !colB && !colC && colE === null && colF === null
 
-        let tipo = 'insumo'
-        if (esItem)      { tipo = 'item'; itemActual = colC; categoriaActual = null }
-        else if (esCategoria) { tipo = 'categoria'; categoriaActual = colC.trim() }
-        else if (esCostoCosto) tipo = 'costo_costo'
-        else if (esSubtotal)   tipo = 'subtotal'
+        // Detectar insumo: tiene precio o cantidad
+        const esInsumo = !colB && colC && !esCategoria && !esCostoCosto && (colE !== null || colF !== null)
 
-        // Calcular total si no viene calculado
-        let total = colG
-        if (!total && colE && colF) total = colE * colF
+        if (esItem) {
+          itemActual = colC
+          codigoActual = String(colB)
+          categoriaActual = null
+          filasParsed.push({
+            obra_id: obra.id, orden, tipo: 'item',
+            codigo_item: codigoActual,
+            nombre_item: colC,
+            categoria: null,
+            descripcion: colC,
+            unidad: colD || null,
+            precio_unitario: null, cantidad: null, total: null,
+            proyecto, nombre_obra, fecha,
+          })
+          orden++
+          continue
+        }
 
-        filasParsed.push({
-          obra_id:        obra.id,
-          orden,
-          tipo,
-          codigo_item:    esItem ? colB : null,
-          nombre_item:    itemActual || null,
-          categoria:      tipo === 'categoria' ? colC.trim() : categoriaActual,
-          descripcion:    colC || null,
-          unidad:         colD || null,
-          precio_unitario: colE,
-          cantidad:       colF,
-          total,
-          proyecto,
-          nombre_obra,
-          fecha,
-        })
-        orden++
+        if (esCategoria) {
+          categoriaActual = colCUpper.trim()
+          filasParsed.push({
+            obra_id: obra.id, orden, tipo: 'categoria',
+            codigo_item: codigoActual,
+            nombre_item: itemActual,
+            categoria: categoriaActual,
+            descripcion: colC,
+            unidad: null, precio_unitario: null, cantidad: null, total: null,
+            proyecto, nombre_obra, fecha,
+          })
+          orden++
+          continue
+        }
+
+        if (esCostoCosto) {
+          // Calcular costo-costo sumando todos los subtotales del ítem
+          const subtotalesItem = filasParsed.filter(f =>
+            f.codigo_item === codigoActual && f.tipo === 'subtotal'
+          )
+          const totalCC = subtotalesItem.reduce((a, f) => a + (f.total || 0), 0)
+          filasParsed.push({
+            obra_id: obra.id, orden, tipo: 'costo_costo',
+            codigo_item: codigoActual,
+            nombre_item: itemActual,
+            categoria: null,
+            descripcion: 'Costo-Costo',
+            unidad: null, precio_unitario: null, cantidad: null,
+            total: totalCC,
+            proyecto, nombre_obra, fecha,
+          })
+          orden++
+          continue
+        }
+
+        if (esSubtotal) {
+          // Calcular subtotal sumando insumos de la categoría actual
+          const insumosCateg = filasParsed.filter(f =>
+            f.codigo_item === codigoActual && f.categoria === categoriaActual && f.tipo === 'insumo'
+          )
+          const sumaCateg = insumosCateg.reduce((a, f) => a + (f.total || 0), 0)
+          filasParsed.push({
+            obra_id: obra.id, orden, tipo: 'subtotal',
+            codigo_item: codigoActual,
+            nombre_item: itemActual,
+            categoria: categoriaActual,
+            descripcion: null,
+            unidad: null, precio_unitario: null, cantidad: null,
+            total: sumaCateg,
+            proyecto, nombre_obra, fecha,
+          })
+          orden++
+          continue
+        }
+
+        if (esInsumo) {
+          const total = colE !== null && colF !== null ? colE * colF : null
+          filasParsed.push({
+            obra_id: obra.id, orden, tipo: 'insumo',
+            codigo_item: codigoActual,
+            nombre_item: itemActual,
+            categoria: categoriaActual,
+            descripcion: colC,
+            unidad: colD || null,
+            precio_unitario: colE,
+            cantidad: colF,
+            total,
+            proyecto, nombre_obra, fecha,
+          })
+          orden++
+        }
       }
 
       // Subir a Storage
@@ -144,7 +211,7 @@ function CostoExplotado({ obra, perfil }) {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Obtener ítems únicos para la calculadora
+  // Items únicos para calculadora
   const items = [...new Map(
     filas.filter(f => f.tipo === 'item').map(f => [f.codigo_item, f])
   ).values()]
@@ -152,12 +219,8 @@ function CostoExplotado({ obra, perfil }) {
   // Calcular resultado de la calculadora
   function calcular() {
     if (!itemSeleccionado) return []
-    const filasItem = filas.filter(f =>
-      f.nombre_item === itemSeleccionado.nombre_item &&
-      f.codigo_item === itemSeleccionado.codigo_item
-    )
-    return filasItem
-      .filter(f => f.tipo === 'insumo' && f.precio_unitario && f.cantidad)
+    return filas
+      .filter(f => f.codigo_item === itemSeleccionado.codigo_item && f.tipo === 'insumo' && f.precio_unitario && f.cantidad)
       .map(f => ({
         categoria: f.categoria,
         descripcion: f.descripcion,
@@ -170,7 +233,8 @@ function CostoExplotado({ obra, perfil }) {
   }
 
   const resultadoCalc = calcular()
-  const CATS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'EQUIPOS', 'DIRECTOS FIJOS', 'SUBCONTRATOS']
+  const CATS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'EQUIPOS', 'DIRECTOS FIJOS', 'SUBCONTRATOS', 'ANALISIS']
+
   const resumenCalc = CATS.map(cat => ({
     cat,
     total: resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat)).reduce((a, r) => a + r.total, 0)
@@ -181,15 +245,13 @@ function CostoExplotado({ obra, perfil }) {
 
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
 
-  // Agrupar filas para visualización
+  // Agrupar para visualización
   const grupos = []
   let grupoActual = null
   for (const f of filas) {
     if (f.tipo === 'item') {
-      grupoActual = { item: f, secciones: [], costoTotal: null }
+      grupoActual = { item: f, secciones: [] }
       grupos.push(grupoActual)
-    } else if (f.tipo === 'costo_costo' && grupoActual) {
-      grupoActual.costoTotal = f
     } else if (grupoActual) {
       grupoActual.secciones.push(f)
     }
@@ -265,7 +327,7 @@ function CostoExplotado({ obra, perfil }) {
                     <div style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '14px' }}>{fmt(r.total)}</div>
                   </div>
                 ))}
-                <div style={{ background: '#1e3a5f', border: '1px solid #1e3a5f', borderRadius: '8px', padding: '10px 16px', minWidth: '150px' }}>
+                <div style={{ background: '#1e3a5f', borderRadius: '8px', padding: '10px 16px', minWidth: '150px' }}>
                   <div style={{ fontSize: '11px', color: '#93c5fd', marginBottom: '4px' }}>TOTAL</div>
                   <div style={{ fontWeight: '700', color: 'white', fontSize: '14px' }}>{fmt(resultadoCalc.reduce((a, r) => a + r.total, 0))}</div>
                 </div>
@@ -315,62 +377,64 @@ function CostoExplotado({ obra, perfil }) {
           {esAdmin ? 'Subí el Excel para ver el costo explotado.' : 'Aún no se cargó el costo explotado para esta obra.'}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          {grupos.map((g, gi) => (
-            <div key={gi} style={{ marginBottom: '24px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-              {/* Header del ítem */}
-              <div style={{ background: '#1e3a5f', color: 'white', padding: '10px 16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <span style={{ fontWeight: '700', fontSize: '13px', minWidth: '40px' }}>{g.item.codigo_item}</span>
-                <span style={{ fontWeight: '700', fontSize: '14px', flex: 1 }}>{g.item.nombre_item || g.item.descripcion}</span>
-                {g.costoTotal?.total && (
-                  <span style={{ fontWeight: '700', fontSize: '14px', color: '#93c5fd' }}>
-                    Costo-Costo: {fmt(g.costoTotal.total)}
-                  </span>
-                )}
-              </div>
+        <div>
+          {grupos.map((g, gi) => {
+            const costoTotal = g.secciones.find(f => f.tipo === 'costo_costo')
+            return (
+              <div key={gi} style={{ marginBottom: '24px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                {/* Header del ítem */}
+                <div style={{ background: '#1e3a5f', color: 'white', padding: '10px 16px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: '700', fontSize: '13px', minWidth: '40px' }}>{g.item.codigo_item}</span>
+                  <span style={{ fontWeight: '700', fontSize: '14px', flex: 1 }}>{g.item.nombre_item}</span>
+                  {costoTotal?.total > 0 && (
+                    <span style={{ fontWeight: '700', fontSize: '14px', color: '#93c5fd' }}>
+                      Costo-Costo: {fmt(costoTotal.total)}
+                    </span>
+                  )}
+                </div>
 
-              {/* Tabla de insumos */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600', color: '#555' }}>Descripción</th>
-                    <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Unid.</th>
-                    <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>P. Unitario</th>
-                    <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Cantidad</th>
-                    <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.secciones.map((f, fi) => {
-                    const esCategoria = f.tipo === 'categoria'
-                    const esSubtotal  = f.tipo === 'subtotal'
-                    return (
-                      <tr key={fi} style={{
-                        background: esCategoria ? '#dbeafe' : esSubtotal ? '#f1f5f9' : fi % 2 === 0 ? 'white' : '#f9fafb',
-                        borderBottom: '1px solid #f1f5f9'
-                      }}>
-                        <td style={{ padding: '6px 12px', fontWeight: esCategoria || esSubtotal ? '700' : '400', color: esCategoria ? '#1e3a5f' : 'inherit' }}>
-                          {esSubtotal ? 'SUBTOTAL' : f.descripcion || ''}
-                        </td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right', color: '#888' }}>
-                          {esCategoria || esSubtotal ? '' : f.unidad || ''}
-                        </td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right' }}>
-                          {esCategoria || esSubtotal ? '' : fmt(f.precio_unitario)}
-                        </td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right' }}>
-                          {esCategoria || esSubtotal ? '' : fmtN(f.cantidad)}
-                        </td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: esSubtotal ? '700' : '400', color: esSubtotal ? '#1e3a5f' : '#111' }}>
-                          {esCategoria ? '' : fmt(f.total)}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ))}
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc' }}>
+                      <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600', color: '#555' }}>Descripción</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Unid.</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>P. Unitario</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Cantidad</th>
+                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.secciones.filter(f => f.tipo !== 'costo_costo').map((f, fi) => {
+                      const esCategoria = f.tipo === 'categoria'
+                      const esSubtotal  = f.tipo === 'subtotal'
+                      return (
+                        <tr key={fi} style={{
+                          background: esCategoria ? '#dbeafe' : esSubtotal ? '#f1f5f9' : fi % 2 === 0 ? 'white' : '#f9fafb',
+                          borderBottom: '1px solid #f1f5f9'
+                        }}>
+                          <td style={{ padding: '6px 12px', fontWeight: esCategoria || esSubtotal ? '700' : '400', color: esCategoria ? '#1e3a5f' : 'inherit' }}>
+                            {esSubtotal ? 'SUBTOTAL' : f.descripcion || ''}
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', color: '#888' }}>
+                            {esCategoria || esSubtotal ? '' : f.unidad || ''}
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>
+                            {esCategoria || esSubtotal ? '' : fmt(f.precio_unitario)}
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>
+                            {esCategoria || esSubtotal ? '' : fmtN(f.cantidad)}
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: esSubtotal ? '700' : '400', color: esSubtotal ? '#1e3a5f' : '#111' }}>
+                            {esCategoria ? '' : fmt(f.total)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

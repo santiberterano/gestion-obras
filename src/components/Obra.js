@@ -2,6 +2,7 @@ import { useState } from 'react'
 import CostoPrevisto from './modulos/CostoPrevisto'
 import ExplosionInsumos from './modulos/ExplosionInsumos'
 import CostoExplotado from './modulos/CostoExplotado'
+import PlanillaMedicion from './modulos/PlanillaMedicion'
 
 function Obra({ obra, perfil, onVolver }) {
   const [seccion, setSeccion] = useState(null)
@@ -105,6 +106,8 @@ function Obra({ obra, perfil, onVolver }) {
               : seccion === 'costo_explotado'
               ? <CostoExplotado obra={obra} perfil={perfil} />
               : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
+              : seccion === 'planilla_medicion'
+? <PlanillaMedicion obra={obra} perfil={perfil} />
             }
           </div>
         )}

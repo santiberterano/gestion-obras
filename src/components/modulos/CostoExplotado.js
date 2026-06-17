@@ -72,7 +72,9 @@ function CostoExplotado({ obra, perfil }) {
         const r = rows[i] || []
 
         // Col A(0) vacía, B(1)=código ítem, C(2)=descripción, D(3)=unidad, E(4)=precio, F(5)=cantidad, G(6)=total(fórmula)
-        const colB = r[1]
+        const colBRaw = r[1]
+        const colBNum = typeof colBRaw === 'number' ? colBRaw : parseFloat(colBRaw)
+        const colB = colBRaw
         const colC = r[2] != null ? String(r[2]).trim() : ''
         const colD = r[3] != null ? String(r[3]).trim() : ''
         const colE = typeof r[4] === 'number' ? r[4] : null
@@ -85,7 +87,7 @@ function CostoExplotado({ obra, perfil }) {
         if (colD.includes('P.Un') || colC.includes('P.Un') || colD.includes('Can.')) continue
 
         // Detectar ítem: col B es número (0.1, 0.3...)
-        const esItem = colB !== null && typeof colB === 'number' && colC
+        const esItem = colBRaw !== null && !isNaN(colBNum) && colBNum > 0 && colC
 
         // Detectar categoría: col C en mayúsculas, sin precio ni cantidad
         const colCUpper = colC.toUpperCase()
@@ -102,7 +104,7 @@ function CostoExplotado({ obra, perfil }) {
 
         if (esItem) {
           itemActual = colC
-          codigoActual = String(colB)
+          codigoActual = String(colBNum)
           categoriaActual = null
           filasParsed.push({
             obra_id: obra.id, orden, tipo: 'item',

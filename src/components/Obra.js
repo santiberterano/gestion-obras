@@ -105,9 +105,9 @@ function Obra({ obra, perfil, onVolver }) {
               ? <ExplosionInsumos obra={obra} perfil={perfil} />
               : seccion === 'costo_explotado'
               ? <CostoExplotado obra={obra} perfil={perfil} />
-              : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
               : seccion === 'planilla_medicion'
-? <PlanillaMedicion obra={obra} perfil={perfil} />
+              ? <PlanillaMedicion obra={obra} perfil={perfil} />
+              : <p style={{ color: '#999' }}>Módulo en desarrollo.</p>
             }
           </div>
         )}

@@ -92,7 +92,7 @@ function CostoExplotado({ obra, perfil }) {
         const esCategoria = !colB && colC && CATEGORIAS.some(cat => colCUpper.startsWith(cat)) && colE === null && colF === null
 
         // Detectar Costo-Costo
-        const esCostoCosto = !colB && colCUpper.includes('COSTO-COSTO') || colCUpper.includes('COSTO COSTO')
+        const esCostoCosto = !colB && (colCUpper.includes('COSTO-COSTO') || colCUpper.includes('COSTO COSTO'))
 
         // Detectar subtotal: sin descripción, sin precio, sin cantidad (fila de SUM)
         const esSubtotal = !colB && !colC && colE === null && colF === null
@@ -135,8 +135,9 @@ function CostoExplotado({ obra, perfil }) {
 
         if (esCostoCosto) {
           // Calcular costo-costo sumando todos los subtotales del ítem
+          const codActual = codigoActual
           const subtotalesItem = filasParsed.filter(f =>
-            f.codigo_item === codigoActual && f.tipo === 'subtotal'
+            f.codigo_item === codActual && f.tipo === 'subtotal'
           )
           const totalCC = subtotalesItem.reduce((a, f) => a + (f.total || 0), 0)
           filasParsed.push({
@@ -155,8 +156,10 @@ function CostoExplotado({ obra, perfil }) {
 
         if (esSubtotal) {
           // Calcular subtotal sumando insumos de la categoría actual
+          const codAct = codigoActual
+          const catAct = categoriaActual
           const insumosCateg = filasParsed.filter(f =>
-            f.codigo_item === codigoActual && f.categoria === categoriaActual && f.tipo === 'insumo'
+            f.codigo_item === codAct && f.categoria === catAct && f.tipo === 'insumo'
           )
           const sumaCateg = insumosCateg.reduce((a, f) => a + (f.total || 0), 0)
           filasParsed.push({

@@ -6,15 +6,18 @@ function PlanillaMedicion({ obra, perfil }) {
   const [items, setItems] = useState([])
   const [avances, setAvances] = useState([])
   const [meta, setMeta] = useState(null)
-  const [meses, setMeses] = useState([])
   const [cargando, setCargando] = useState(true)
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState(null)
   const [exito, setExito] = useState(null)
-  const [mesActivo, setMesActivo] = useState(1)
+  const [vista, setVista] = useState(null) // 'proy_inicial' | 'proy_mensual' | 'definitiva'
+  const [mesActivo, setMesActivo] = useState(null)
+  const [porcentajes, setPorcentajes] = useState({}) // { item_id: pct }
+  const [guardando, setGuardando] = useState(false)
   const inputRef = useRef()
 
   const esAdmin = perfil?.area === 'administracion'
+  const esJefe  = perfil?.area === 'jefe_obra'
 
   useEffect(() => {
     cargarDatos()
@@ -33,14 +36,11 @@ function PlanillaMedicion({ obra, perfil }) {
       .from('planilla_avances')
       .select('*')
       .eq('obra_id', obra.id)
+      .order('mes', { ascending: true })
 
     if (itemsData && itemsData.length > 0) {
       setMeta({ proyecto: itemsData[0].proyecto, nombre_obra: itemsData[0].nombre_obra })
       setItems(itemsData)
-
-      // Detectar meses disponibles
-      const mesesUnicos = [...new Set((avancesData || []).map(a => a.mes))].sort((a, b) => a - b)
-      if (mesesUnicos.length > 0) setMeses(mesesUnicos)
     } else {
       setItems([])
       setMeta(null)
@@ -62,28 +62,10 @@ function PlanillaMedicion({ obra, perfil }) {
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null })
 
-      // Metadatos
       const nombre_obra = String(rows[1]?.[1] || '').trim()
-      const proyecto    = String(rows[1]?.[2] || '') + ' ' + String(rows[2]?.[2] || '')
+      const proyecto    = String(rows[1]?.[2] || '').trim()
 
-      // Detectar meses — fila 2 (índice 1), desde col H (índice 7), de a 2
-      const mesesDetectados = []
-      let colMes = 7
-      while (colMes < (rows[1]?.length || 0)) {
-        const encabezado = String(rows[1]?.[colMes] || '').trim()
-        if (encabezado.toUpperCase().startsWith('MES')) {
-          const numMes = parseInt(encabezado.replace(/\D/g, '')) || mesesDetectados.length + 1
-          const fecha = String(rows[3]?.[colMes + 1] || '').trim() || null
-          mesesDetectados.push({ num: numMes, colPct: colMes, colMonto: colMes + 1, fecha })
-          colMes += 2
-        } else {
-          colMes++
-        }
-      }
-
-      // Parsear ítems desde fila 5 (índice 4)
       const itemsParsed = []
-      const avancesParsed = []
       let orden = 0
 
       for (let i = 4; i < rows.length; i++) {
@@ -98,81 +80,27 @@ function PlanillaMedicion({ obra, perfil }) {
         if (!colA && !colB) continue
         if (colA === 'ITEM' || colA === 'Item') continue
 
-        // Rubro: código entero (01, 02...)
         const esRubro = colA && /^\d+$/.test(colA) && colB
-        // Ítem: código decimal (01.01, 02.03...)
         const esItem  = colA && /^\d+\.\d+/.test(colA) && colB
-
         if (!esRubro && !esItem) continue
 
-        const tipo = esRubro ? 'rubro' : 'item'
-
         itemsParsed.push({
-          obra_id: obra.id,
-          orden,
-          tipo,
-          codigo: colA,
-          descripcion: colB,
+          obra_id: obra.id, orden,
+          tipo: esRubro ? 'rubro' : 'item',
+          codigo: colA, descripcion: colB,
           unidad: colC || null,
-          cantidad: colD,
-          precio_unitario: colE,
-          total: colF,
-          proyecto,
-          nombre_obra,
-          fecha_base: null,
+          cantidad: colD, precio_unitario: colE, total: colF,
+          proyecto, nombre_obra, fecha_base: null,
         })
-
-        // Avances por mes
-        for (const mes of mesesDetectados) {
-          const pct = typeof r[mes.colPct] === 'number' ? r[mes.colPct] : null
-          const monto = typeof r[mes.colMonto] === 'number' ? r[mes.colMonto] : (pct && colF ? pct * colF : null)
-
-          if (pct !== null && pct > 0) {
-            avancesParsed.push({
-              obra_id: obra.id,
-              orden_item: orden,
-              mes: mes.num,
-              tipo_registro: 'definitivo',
-              porcentaje: pct,
-              monto,
-              fecha: mes.fecha,
-            })
-          }
-        }
-
         orden++
       }
 
-      // Guardar en Supabase
+      await supabase.from('planilla_avances').delete().eq('obra_id', obra.id)
       await supabase.from('planilla_medicion').delete().eq('obra_id', obra.id)
-      const { data: insertedItems, error: insertError } = await supabase
-        .from('planilla_medicion')
-        .insert(itemsParsed)
-        .select()
+      const { error: insertError } = await supabase.from('planilla_medicion').insert(itemsParsed)
       if (insertError) throw new Error('Error guardando ítems: ' + insertError.message)
 
-      // Mapear avances con IDs reales
-      if (avancesParsed.length > 0 && insertedItems) {
-        const avancesConId = avancesParsed.map(a => {
-          const item = insertedItems.find(it => it.orden === a.orden_item)
-          return item ? {
-            planilla_item_id: item.id,
-            obra_id: obra.id,
-            mes: a.mes,
-            tipo_registro: a.tipo_registro,
-            porcentaje: a.porcentaje,
-            monto: a.monto,
-            fecha: a.fecha,
-          } : null
-        }).filter(Boolean)
-
-        await supabase.from('planilla_avances').delete().eq('obra_id', obra.id)
-        if (avancesConId.length > 0) {
-          await supabase.from('planilla_avances').insert(avancesConId)
-        }
-      }
-
-      setExito('Planilla cargada correctamente.')
+      setExito('Planilla base cargada correctamente.')
       await cargarDatos()
     } catch (err) {
       setError(err.message || 'Error procesando el archivo.')
@@ -181,20 +109,119 @@ function PlanillaMedicion({ obra, perfil }) {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Calcular totales del mes activo
-  const avancesMes = avances.filter(a => a.mes === mesActivo)
-  const totalObra  = items.find(it => it.tipo === 'rubro') 
-    ? items.filter(it => it.tipo === 'rubro').reduce((a, it) => a + (it.total || 0), 0)
-    : 0
-  const totalCertMes = avancesMes.reduce((a, av) => a + (av.monto || 0), 0)
-  const pctAcumulado = totalObra > 0 ? totalCertMes / totalObra : 0
+  function abrirCarga(tipo) {
+    // Para definitiva, el mes es el siguiente al último definitivo cargado
+    if (tipo === 'definitiva') {
+      const mesesDef = [...new Set(avances.filter(a => a.tipo_registro === 'definitivo').map(a => a.mes))]
+      const proximoMes = mesesDef.length > 0 ? Math.max(...mesesDef) + 1 : 1
+      setMesActivo(proximoMes)
+    } else if (tipo === 'proy_mensual') {
+      const mesesDef = [...new Set(avances.filter(a => a.tipo_registro === 'definitivo').map(a => a.mes))]
+      const mesCorriente = mesesDef.length > 0 ? Math.max(...mesesDef) + 1 : 1
+      setMesActivo(mesCorriente)
+    } else {
+      setMesActivo(null)
+    }
+    // Precargar % existentes si ya hay datos
+    const pcts = {}
+    items.filter(it => it.tipo === 'item').forEach(it => {
+      const av = avances.find(a => a.planilla_item_id === it.id && 
+        a.tipo_registro === tipo &&
+        (tipo === 'proy_inicial' || a.mes === mesActivo))
+      if (av) pcts[it.id] = (av.porcentaje * 100).toFixed(2)
+    })
+    setPorcentajes(pcts)
+    setVista(tipo)
+    setError(null)
+    setExito(null)
+  }
+
+  async function guardarAvances() {
+    setGuardando(true)
+    setError(null)
+    try {
+      const itemsItems = items.filter(it => it.tipo === 'item')
+      const registros = []
+
+      for (const it of itemsItems) {
+        const pctStr = porcentajes[it.id]
+        if (!pctStr || pctStr === '' || pctStr === '0') continue
+        const pct = parseFloat(String(pctStr).replace(',', '.')) / 100
+        if (isNaN(pct)) continue
+        const monto = it.total ? pct * it.total : null
+
+        if (vista === 'proy_inicial') {
+          // Proyección inicial: guarda para todos los meses detectados del Excel (usamos mes=0 para indicar global)
+          registros.push({
+            planilla_item_id: it.id,
+            obra_id: obra.id,
+            mes: 0,
+            tipo_registro: 'proy_inicial',
+            porcentaje: pct,
+            monto,
+            fecha: null,
+          })
+        } else {
+          registros.push({
+            planilla_item_id: it.id,
+            obra_id: obra.id,
+            mes: mesActivo,
+            tipo_registro: vista,
+            porcentaje: pct,
+            monto,
+            fecha: null,
+          })
+        }
+      }
+
+      // Borrar registros anteriores del mismo tipo/mes y reinsertar
+      if (vista === 'proy_inicial') {
+        await supabase.from('planilla_avances')
+          .delete()
+          .eq('obra_id', obra.id)
+          .eq('tipo_registro', 'proy_inicial')
+      } else {
+        await supabase.from('planilla_avances')
+          .delete()
+          .eq('obra_id', obra.id)
+          .eq('tipo_registro', vista)
+          .eq('mes', mesActivo)
+      }
+
+      if (registros.length > 0) {
+        const { error: insErr } = await supabase.from('planilla_avances').insert(registros)
+        if (insErr) throw new Error('Error guardando avances: ' + insErr.message)
+      }
+
+      const labels = { proy_inicial: 'Proyección inicial', proy_mensual: 'Proyección mensual', definitiva: 'Medición definitiva' }
+      setExito(`${labels[vista]} guardada correctamente.`)
+      setVista(null)
+      setPorcentajes({})
+      await cargarDatos()
+    } catch (err) {
+      setError(err.message)
+    }
+    setGuardando(false)
+  }
+
+  // Meses con datos definitivos
+  const mesesDefinitivos = [...new Set(avances.filter(a => a.tipo_registro === 'definitivo').map(a => a.mes))].sort((a,b) => a-b)
+  const mesesProyInicial = avances.filter(a => a.tipo_registro === 'proy_inicial').length > 0
+  const proximoMesDef = mesesDefinitivos.length > 0 ? Math.max(...mesesDefinitivos) + 1 : 1
+
+  // Calcular totales por mes definitivo
+  function totalCertificado(mes) {
+    return avances.filter(a => a.tipo_registro === 'definitivo' && a.mes === mes)
+      .reduce((s, a) => s + (a.monto || 0), 0)
+  }
+  const totalObra = items.filter(it => it.tipo === 'rubro').reduce((s, it) => s + (it.total || 0), 0)
 
   const fmt    = (n) => n != null ? '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
-  const fmtPct = (n) => n != null ? (Number(n) * 100).toFixed(2) + '%' : '-'
+  const fmtPct = (n) => n != null ? (Number(n) * 100).toFixed(1) + '%' : '-'
 
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
 
-  // Agrupar por rubro
+  // Grupos para visualización
   const grupos = []
   let grupoActual = null
   for (const it of items) {
@@ -212,7 +239,7 @@ function PlanillaMedicion({ obra, perfil }) {
       {meta && (
         <div style={{ marginBottom: '20px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: '#555' }}>
           {meta.nombre_obra && <span><b style={{ color: '#999' }}>Obra:</b> {meta.nombre_obra}</span>}
-          {meta.proyecto    && <span><b style={{ color: '#999' }}>Proyecto:</b> {meta.proyecto}</span>}
+          {totalObra > 0 && <span style={{ marginLeft: 'auto', fontWeight: '700', fontSize: '15px', color: '#2563eb' }}>Total Obra: {fmt(totalObra)}</span>}
         </div>
       )}
 
@@ -220,8 +247,8 @@ function PlanillaMedicion({ obra, perfil }) {
       {esAdmin && (
         <div style={{ marginBottom: '20px', padding: '16px 20px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '200px' }}>
-            <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '2px' }}>{items.length > 0 ? '🔄 Reemplazar Planilla' : '📤 Subir Planilla de Medición'}</div>
-            <div style={{ fontSize: '12px', color: '#888' }}>Archivos .xlsx</div>
+            <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '2px' }}>{items.length > 0 ? '🔄 Reemplazar planilla base' : '📤 Subir Planilla de Medición'}</div>
+            <div style={{ fontSize: '12px', color: '#888' }}>Carga los ítems base del Excel (.xlsx)</div>
           </div>
           <input ref={inputRef} type="file" accept=".xlsx" onChange={handleArchivo} style={{ display: 'none' }} id="upload-pm" />
           <label htmlFor="upload-pm" style={{ padding: '8px 20px', background: '#2563eb', color: 'white', borderRadius: '6px', cursor: subiendo ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px', opacity: subiendo ? 0.6 : 1, whiteSpace: 'nowrap' }}>
@@ -230,97 +257,87 @@ function PlanillaMedicion({ obra, perfil }) {
         </div>
       )}
 
+      {/* Botones de carga */}
+      {items.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {esAdmin && (
+            <button onClick={() => abrirCarga('proy_inicial')}
+              style={{ padding: '10px 18px', background: vista === 'proy_inicial' ? '#2563eb' : mesesProyInicial ? '#f0fdf4' : 'white', color: vista === 'proy_inicial' ? 'white' : mesesProyInicial ? '#16a34a' : '#2563eb', border: '1px solid ' + (mesesProyInicial ? '#86efac' : '#2563eb'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+              {mesesProyInicial ? '✓ Proyección Inicial' : '📋 Cargar Proyección Inicial'}
+            </button>
+          )}
+          {esJefe && (
+            <>
+              <button onClick={() => abrirCarga('proy_mensual')}
+                style={{ padding: '10px 18px', background: vista === 'proy_mensual' ? '#2563eb' : 'white', color: vista === 'proy_mensual' ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+                📊 Proyección Mes {String(proximoMesDef).padStart(2,'0')}
+              </button>
+              <button onClick={() => abrirCarga('definitiva')}
+                style={{ padding: '10px 18px', background: vista === 'definitiva' ? '#16a34a' : 'white', color: vista === 'definitiva' ? 'white' : '#16a34a', border: '1px solid #16a34a', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+                ✅ Medición Definitiva Mes {String(proximoMesDef).padStart(2,'0')}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
       {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
 
-      {items.length === 0 ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
-          {esAdmin ? 'Subí la planilla para ver el avance de obra.' : 'Aún no se cargó la planilla de medición.'}
-        </div>
-      ) : (
-        <>
-          {/* Selector de mes */}
-          {meses.length > 0 && (
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#555', fontWeight: '600' }}>Mes:</span>
-              {meses.map(m => (
-                <button key={m} onClick={() => setMesActivo(m)}
-                  style={{ padding: '6px 14px', background: mesActivo === m ? '#2563eb' : 'white', color: mesActivo === m ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
-                  Mes {String(m).padStart(2, '0')}
-                </button>
-              ))}
-            </div>
-          )}
+      {/* Formulario de carga */}
+      {vista && (
+        <div style={{ marginBottom: '24px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h4 style={{ margin: 0, color: '#1e3a5f' }}>
+              {vista === 'proy_inicial' && 'Proyección Inicial — % por ítem'}
+              {vista === 'proy_mensual' && `Proyección Mensual — Mes ${String(mesActivo).padStart(2,'0')}`}
+              {vista === 'definitiva' && `Medición Definitiva — Mes ${String(mesActivo).padStart(2,'0')}`}
+            </h4>
+            <button onClick={() => { setVista(null); setPorcentajes({}) }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '18px' }}>✕</button>
+          </div>
 
-          {/* Resumen del mes */}
-          {meses.length > 0 && (
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-              <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', minWidth: '180px' }}>
-                <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>TOTAL OBRA</div>
-                <div style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '15px' }}>{fmt(totalObra)}</div>
-              </div>
-              <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', minWidth: '180px' }}>
-                <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>CERTIFICADO MES {String(mesActivo).padStart(2,'0')}</div>
-                <div style={{ fontWeight: '700', color: '#2563eb', fontSize: '15px' }}>{fmt(totalCertMes)}</div>
-              </div>
-              <div style={{ background: '#1e3a5f', borderRadius: '8px', padding: '12px 20px', minWidth: '180px' }}>
-                <div style={{ fontSize: '11px', color: '#93c5fd', marginBottom: '4px' }}>AVANCE ACUMULADO</div>
-                <div style={{ fontWeight: '700', color: 'white', fontSize: '15px' }}>{fmtPct(pctAcumulado)}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Tabla */}
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ background: '#1e3a5f', color: 'white' }}>
-                  {['Ítem', 'Descripción', 'Unid.', 'Cantidad', 'P. Unitario', 'Total'].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Descripción' ? 'left' : 'right', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '12px' }}>{h}</th>
-                  ))}
-                  {meses.map(m => (
-                    <th key={m} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '12px', background: m === mesActivo ? '#2563eb' : '#1e3a5f' }}>
-                      Mes {String(m).padStart(2,'0')}
-                    </th>
-                  ))}
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '600' }}>Ítem</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600' }}>Total</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600' }}>% Avance</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600' }}>Monto</th>
                 </tr>
               </thead>
               <tbody>
                 {grupos.map((g, gi) => (
                   <React.Fragment key={gi}>
-                    {/* Rubro */}
                     <tr style={{ background: '#dbeafe' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.codigo}</td>
-                      <td colSpan={4} style={{ padding: '8px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>{fmt(g.rubro.total)}</td>
-                      {meses.map(m => {
-                        const avRubro = avances.filter(a => a.mes === m && g.items.some(it => it.id === a.planilla_item_id))
-                        const montoRubro = avRubro.reduce((a, av) => a + (av.monto || 0), 0)
-                        return (
-                          <td key={m} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f', background: m === mesActivo ? '#eff6ff' : 'transparent' }}>
-                            {montoRubro > 0 ? fmt(montoRubro) : '-'}
-                          </td>
-                        )
-                      })}
+                      <td style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.codigo}</td>
+                      <td colSpan={4} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
                     </tr>
-                    {/* Ítems */}
                     {g.items.map((it, fi) => {
+                      const pctStr = porcentajes[it.id] || ''
+                      const pct = parseFloat(String(pctStr).replace(',', '.')) / 100
+                      const monto = !isNaN(pct) && it.total ? pct * it.total : null
                       return (
                         <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '7px 12px', color: '#666' }}>{it.codigo}</td>
-                          <td style={{ padding: '7px 12px' }}>{it.descripcion}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{it.unidad}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>{it.cantidad != null ? Number(it.cantidad).toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '-'}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right' }}>{fmt(it.precio_unitario)}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600' }}>{fmt(it.total)}</td>
-                          {meses.map(m => {
-                            const av = avances.find(a => a.planilla_item_id === it.id && a.mes === m)
-                            return (
-                              <td key={m} style={{ padding: '7px 12px', textAlign: 'right', background: m === mesActivo ? '#eff6ff' : 'transparent' }}>
-                                {av ? fmtPct(av.porcentaje) : '-'}
-                              </td>
-                            )
-                          })}
+                          <td style={{ padding: '6px 12px', color: '#666', whiteSpace: 'nowrap' }}>{it.codigo}</td>
+                          <td style={{ padding: '6px 12px' }}>{it.descripcion}</td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.total)}</td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                              <input
+                                type="number" min="0" max="100" step="0.01"
+                                value={pctStr}
+                                onChange={ev => setPorcentajes(prev => ({ ...prev, [it.id]: ev.target.value }))}
+                                style={{ width: '70px', padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', textAlign: 'right' }}
+                              />
+                              <span style={{ color: '#888', fontSize: '12px' }}>%</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? '#2563eb' : '#aaa' }}>
+                            {monto ? fmt(monto) : '-'}
+                          </td>
                         </tr>
                       )
                     })}
@@ -329,7 +346,116 @@ function PlanillaMedicion({ obra, perfil }) {
               </tbody>
             </table>
           </div>
-        </>
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button onClick={() => { setVista(null); setPorcentajes({}) }}
+              style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#555' }}>
+              Cancelar
+            </button>
+            <button onClick={guardarAvances} disabled={guardando}
+              style={{ padding: '8px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: guardando ? 'not-allowed' : 'pointer', opacity: guardando ? 0.6 : 1 }}>
+              {guardando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Resumen meses definitivos */}
+      {mesesDefinitivos.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {mesesDefinitivos.map(m => {
+            const cert = totalCertificado(m)
+            const pct  = totalObra > 0 ? cert / totalObra : 0
+            return (
+              <div key={m} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', minWidth: '160px' }}>
+                <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>MES {String(m).padStart(2,'0')} — DEFINITIVO</div>
+                <div style={{ fontWeight: '700', color: '#2563eb', fontSize: '14px' }}>{fmt(cert)}</div>
+                <div style={{ fontSize: '12px', color: '#16a34a', marginTop: '2px' }}>{fmtPct(pct)} acumulado</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Tabla principal */}
+      {items.length === 0 ? (
+        <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
+          {esAdmin ? 'Subí la planilla base para comenzar.' : 'Aún no se cargó la planilla de medición.'}
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '600', whiteSpace: 'nowrap' }}>Ítem</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>Unid.</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>Cant.</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>P. Unit.</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>Total</th>
+                {mesesProyInicial && <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap', background: '#334d6e' }}>Proy. Inicial</th>}
+                {mesesDefinitivos.map(m => (
+                  <th key={m} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap', background: '#1a5c3a' }}>
+                    Mes {String(m).padStart(2,'0')} Def.
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {grupos.map((g, gi) => (
+                <React.Fragment key={gi}>
+                  <tr style={{ background: '#dbeafe' }}>
+                    <td style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.codigo}</td>
+                    <td colSpan={4} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>{fmt(g.rubro.total)}</td>
+                    {mesesProyInicial && (
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>
+                        {fmt(g.items.reduce((s, it) => {
+                          const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'proy_inicial')
+                          return s + (av?.monto || 0)
+                        }, 0))}
+                      </td>
+                    )}
+                    {mesesDefinitivos.map(m => (
+                      <td key={m} style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>
+                        {fmt(g.items.reduce((s, it) => {
+                          const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'definitivo' && a.mes === m)
+                          return s + (av?.monto || 0)
+                        }, 0))}
+                      </td>
+                    ))}
+                  </tr>
+                  {g.items.map((it, fi) => {
+                    const avPI = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'proy_inicial')
+                    return (
+                      <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '6px 12px', color: '#666' }}>{it.codigo}</td>
+                        <td style={{ padding: '6px 12px' }}>{it.descripcion}</td>
+                        <td style={{ padding: '6px 12px', textAlign: 'right', color: '#888' }}>{it.unidad}</td>
+                        <td style={{ padding: '6px 12px', textAlign: 'right' }}>{it.cantidad != null ? Number(it.cantidad).toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '-'}</td>
+                        <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.precio_unitario)}</td>
+                        <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600' }}>{fmt(it.total)}</td>
+                        {mesesProyInicial && (
+                          <td style={{ padding: '6px 12px', textAlign: 'right', color: '#334d6e' }}>
+                            {avPI ? fmtPct(avPI.porcentaje) : '-'}
+                          </td>
+                        )}
+                        {mesesDefinitivos.map(m => {
+                          const avD = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'definitivo' && a.mes === m)
+                          return (
+                            <td key={m} style={{ padding: '6px 12px', textAlign: 'right', color: '#1a5c3a' }}>
+                              {avD ? fmtPct(avD.porcentaje) : '-'}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

@@ -68,7 +68,7 @@ function CostoExplotado({ obra, perfil }) {
       let codigoActual = null
       let categoriaActual = null
 
-      for (let i = 9; i < rows.length; i++) {
+      for (let i = 0; i < rows.length; i++) {
         const r = rows[i] || []
 
         // Col A(0) vacía, B(1)=código ítem, C(2)=descripción, D(3)=unidad, E(4)=precio, F(5)=cantidad, G(6)=total(fórmula)

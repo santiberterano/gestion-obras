@@ -10,11 +10,9 @@ function CostoExplotado({ obra, perfil }) {
   const [error, setError] = useState(null)
   const [exito, setExito] = useState(null)
   const [vistaCalc, setVistaCalc] = useState(false)
-  const [itemSeleccionado, setItemSeleccionado] = useState(null)
-  const [cantidadCalc, setCantidadCalc] = useState(1)
-  const [diasCalc, setDiasCalc] = useState('')
-  const [resultadoVisible, setResultadoVisible] = useState(null)
-  const [detalleExpandido, setDetalleExpandido] = useState({})
+  const [tablaVisible, setTablaVisible] = useState(false)
+  const [tareas, setTareas] = useState([]) // array de { id, itemSeleccionado, cantidad, dias, resultado, detalleExpandido }
+  const [creandoSC, setCreandoSC] = useState(false)
   const inputRef = useRef()
 
   const esAdmin = perfil?.area === 'administracion'
@@ -58,13 +56,11 @@ function CostoExplotado({ obra, perfil }) {
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null })
 
-      // Metadatos — col A (índice 0), filas 2-4
       const proyecto    = String(rows[1]?.[0] || '').trim()
       const nombre_obra = String(rows[2]?.[0] || '').trim()
       const fecha       = String(rows[3]?.[0] || '').trim() || null
 
       const CATEGORIAS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'DIRECTOS FIJOS', 'EQUIPOS', 'SUBCONTRATOS', 'ANALISIS']
-
       const filasParsed = []
       let orden = 0
       let itemActual = null
@@ -73,137 +69,57 @@ function CostoExplotado({ obra, perfil }) {
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i] || []
-
-        // Col A(0) vacía, B(1)=código ítem, C(2)=descripción, D(3)=unidad, E(4)=precio, F(5)=cantidad, G(6)=total(fórmula)
         const colBRaw = r[1]
         const colBNum = typeof colBRaw === 'number' ? colBRaw : parseFloat(colBRaw)
-        const colB = colBRaw
         const colC = r[2] != null ? String(r[2]).trim() : ''
         const colD = r[3] != null ? String(r[3]).trim() : ''
         const colE = typeof r[4] === 'number' ? r[4] : null
         const colF = typeof r[5] === 'number' ? r[5] : null
 
-        // Saltar filas completamente vacías
-        if (!colB && !colC && !colE && !colF) continue
-
-        // Saltar fila encabezado de columnas (tiene P.Un o Can.)
+        if (!colBRaw && !colC && !colE && !colF) continue
         if (colD.includes('P.Un') || colC.includes('P.Un') || colD.includes('Can.')) continue
 
-        // Detectar ítem: col B es número (0.1, 0.3...)
-        const esItem = colBRaw !== null && !isNaN(colBNum) && colBNum > 0 && colC
-
-        // Detectar categoría: col C en mayúsculas, sin precio ni cantidad
-        const colCUpper = colC.toUpperCase()
-        const esCategoria = !colB && colC && CATEGORIAS.some(cat => colCUpper.startsWith(cat)) && colE === null && colF === null
-
-        // Detectar Costo-Costo
-        const esCostoCosto = !colB && (colCUpper.includes('COSTO-COSTO') || colCUpper.includes('COSTO COSTO'))
-
-        // Detectar subtotal: sin descripción, sin precio, sin cantidad (fila de SUM)
-        const esSubtotal = !colB && !colC && colE === null && colF === null
-
-        // Detectar insumo: tiene precio o cantidad
-        const esInsumo = !colB && colC && !esCategoria && !esCostoCosto && (colE !== null || colF !== null)
+        const esItem      = colBRaw !== null && !isNaN(colBNum) && colBNum > 0 && colC
+        const colCUpper   = colC.toUpperCase()
+        const esCategoria = !colBRaw && colC && CATEGORIAS.some(cat => colCUpper.startsWith(cat)) && colE === null && colF === null
+        const esCostoCosto = !colBRaw && (colCUpper.includes('COSTO-COSTO') || colCUpper.includes('COSTO COSTO'))
+        const esSubtotal  = !colBRaw && !colC && colE === null && colF === null
+        const esInsumo    = !colBRaw && colC && !esCategoria && !esCostoCosto && (colE !== null || colF !== null)
 
         if (esItem) {
-          itemActual = colC
-          codigoActual = String(colBNum)
-          categoriaActual = null
-          filasParsed.push({
-            obra_id: obra.id, orden, tipo: 'item',
-            codigo_item: codigoActual,
-            nombre_item: colC,
-            categoria: null,
-            descripcion: colC,
-            unidad: colD || null,
-            precio_unitario: null, cantidad: null, total: null,
-            proyecto, nombre_obra, fecha,
-          })
-          orden++
-          continue
+          itemActual = colC; codigoActual = String(colBNum); categoriaActual = null
+          filasParsed.push({ obra_id: obra.id, orden, tipo: 'item', codigo_item: codigoActual, nombre_item: colC, categoria: null, descripcion: colC, unidad: colD || null, precio_unitario: null, cantidad: null, total: null, proyecto, nombre_obra, fecha })
+          orden++; continue
         }
-
         if (esCategoria) {
           categoriaActual = colCUpper.trim()
-          filasParsed.push({
-            obra_id: obra.id, orden, tipo: 'categoria',
-            codigo_item: codigoActual,
-            nombre_item: itemActual,
-            categoria: categoriaActual,
-            descripcion: colC,
-            unidad: null, precio_unitario: null, cantidad: null, total: null,
-            proyecto, nombre_obra, fecha,
-          })
-          orden++
-          continue
+          filasParsed.push({ obra_id: obra.id, orden, tipo: 'categoria', codigo_item: codigoActual, nombre_item: itemActual, categoria: categoriaActual, descripcion: colC, unidad: null, precio_unitario: null, cantidad: null, total: null, proyecto, nombre_obra, fecha })
+          orden++; continue
         }
-
         if (esCostoCosto) {
-          // Calcular costo-costo sumando todos los subtotales del ítem
           const codActual = codigoActual
-          const subtotalesItem = filasParsed.filter(f =>
-            f.codigo_item === codActual && f.tipo === 'subtotal'
-          )
+          const subtotalesItem = filasParsed.filter(f => f.codigo_item === codActual && f.tipo === 'subtotal')
           const totalCC = subtotalesItem.reduce((a, f) => a + (f.total || 0), 0)
-          filasParsed.push({
-            obra_id: obra.id, orden, tipo: 'costo_costo',
-            codigo_item: codigoActual,
-            nombre_item: itemActual,
-            categoria: null,
-            descripcion: 'Costo-Costo',
-            unidad: null, precio_unitario: null, cantidad: null,
-            total: totalCC,
-            proyecto, nombre_obra, fecha,
-          })
-          orden++
-          continue
+          filasParsed.push({ obra_id: obra.id, orden, tipo: 'costo_costo', codigo_item: codigoActual, nombre_item: itemActual, categoria: null, descripcion: 'Costo-Costo', unidad: null, precio_unitario: null, cantidad: null, total: totalCC, proyecto, nombre_obra, fecha })
+          orden++; continue
         }
-
         if (esSubtotal) {
-          // Calcular subtotal sumando insumos de la categoría actual
-          const codAct = codigoActual
-          const catAct = categoriaActual
-          const insumosCateg = filasParsed.filter(f =>
-            f.codigo_item === codAct && f.categoria === catAct && f.tipo === 'insumo'
-          )
+          const codAct = codigoActual; const catAct = categoriaActual
+          const insumosCateg = filasParsed.filter(f => f.codigo_item === codAct && f.categoria === catAct && f.tipo === 'insumo')
           const sumaCateg = insumosCateg.reduce((a, f) => a + (f.total || 0), 0)
-          filasParsed.push({
-            obra_id: obra.id, orden, tipo: 'subtotal',
-            codigo_item: codigoActual,
-            nombre_item: itemActual,
-            categoria: categoriaActual,
-            descripcion: null,
-            unidad: null, precio_unitario: null, cantidad: null,
-            total: sumaCateg,
-            proyecto, nombre_obra, fecha,
-          })
-          orden++
-          continue
+          filasParsed.push({ obra_id: obra.id, orden, tipo: 'subtotal', codigo_item: codigoActual, nombre_item: itemActual, categoria: categoriaActual, descripcion: null, unidad: null, precio_unitario: null, cantidad: null, total: sumaCateg, proyecto, nombre_obra, fecha })
+          orden++; continue
         }
-
         if (esInsumo) {
           const total = colE !== null && colF !== null ? colE * colF : null
-          filasParsed.push({
-            obra_id: obra.id, orden, tipo: 'insumo',
-            codigo_item: codigoActual,
-            nombre_item: itemActual,
-            categoria: categoriaActual,
-            descripcion: colC,
-            unidad: colD || null,
-            precio_unitario: colE,
-            cantidad: colF,
-            total,
-            proyecto, nombre_obra, fecha,
-          })
+          filasParsed.push({ obra_id: obra.id, orden, tipo: 'insumo', codigo_item: codigoActual, nombre_item: itemActual, categoria: categoriaActual, descripcion: colC, unidad: colD || null, precio_unitario: colE, cantidad: colF, total, proyecto, nombre_obra, fecha })
           orden++
         }
       }
 
-      // Subir a Storage
       const nombreArchivo = `${obra.id}/costo_explotado.xlsx`
       await supabase.storage.from('excels').remove([nombreArchivo])
-      const { error: storageError } = await supabase.storage
-        .from('excels').upload(nombreArchivo, archivo, { upsert: true })
+      const { error: storageError } = await supabase.storage.from('excels').upload(nombreArchivo, archivo, { upsert: true })
       if (storageError) throw new Error('Error subiendo archivo: ' + storageError.message)
 
       await supabase.from('costo_explotado').delete().eq('obra_id', obra.id)
@@ -219,20 +135,16 @@ function CostoExplotado({ obra, perfil }) {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Items únicos para calculadora
-  const items = [...new Map(
-    filas.filter(f => f.tipo === 'item').map(f => [f.codigo_item, f])
-  ).values()]
+  const items = [...new Map(filas.filter(f => f.tipo === 'item').map(f => [f.codigo_item, f])).values()]
 
-  // Calcular resultado de la calculadora
-  function calcular() {
-    if (!itemSeleccionado) return []
-    const horasDisponibles = diasCalc * 9
+  function calcularTarea(itemSel, cantidad, dias) {
+    if (!itemSel) return []
+    const horasDisponibles = dias ? parseFloat(dias) * 9 : null
     return filas
-      .filter(f => f.codigo_item === itemSeleccionado.codigo_item && f.tipo === 'insumo' && f.precio_unitario && f.cantidad)
+      .filter(f => f.codigo_item === itemSel.codigo_item && f.tipo === 'insumo' && f.precio_unitario && f.cantidad)
       .map(f => {
         const esManoDeObra = f.categoria?.toUpperCase().startsWith('MANO DE OBRA')
-        const cantidad_total = f.cantidad * cantidadCalc
+        const cantidad_total = f.cantidad * cantidad
         const personas = esManoDeObra && horasDisponibles > 0 ? cantidad_total / horasDisponibles : null
         return {
           categoria: f.categoria,
@@ -248,25 +160,112 @@ function CostoExplotado({ obra, perfil }) {
       })
   }
 
-  const resultadoCalc = resultadoVisible || []
-  const CATS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'EQUIPOS', 'DIRECTOS FIJOS', 'SUBCONTRATOS', 'ANALISIS']
+  function agregarTarea() {
+    setTareas(prev => [...prev, {
+      id: Date.now(),
+      itemSeleccionado: null,
+      cantidad: 1,
+      dias: '',
+      resultado: null,
+      detalleExpandido: {},
+    }])
+  }
 
+  function actualizarTarea(id, campo, valor) {
+    setTareas(prev => prev.map(t => t.id === id ? { ...t, [campo]: valor, resultado: null } : t))
+  }
+
+  function calcularTareaId(id) {
+    setTareas(prev => prev.map(t => {
+      if (t.id !== id) return t
+      const resultado = calcularTarea(t.itemSeleccionado, t.cantidad, t.dias)
+      return { ...t, resultado }
+    }))
+  }
+
+  function quitarTarea(id) {
+    setTareas(prev => prev.filter(t => t.id !== id))
+  }
+
+  function toggleDetalle(tareaId, cat) {
+    setTareas(prev => prev.map(t => {
+      if (t.id !== tareaId) return t
+      return { ...t, detalleExpandido: { ...t.detalleExpandido, [cat]: !t.detalleExpandido[cat] } }
+    }))
+  }
+
+  async function crearSC() {
+    setCreandoSC(true)
+    setError(null)
+    try {
+      // Recolectar todos los insumos de todas las tareas, excluyendo mano de obra
+      const insumosSC = []
+      for (const tarea of tareas) {
+        if (!tarea.resultado) continue
+        for (const r of tarea.resultado) {
+          if (r.esManoDeObra) continue
+          insumosSC.push({
+            descripcion: r.descripcion,
+            unidad: r.unidad,
+            cantidad: r.cantidad_total,
+            item_origen: tarea.itemSeleccionado?.nombre_item,
+          })
+        }
+      }
+
+      if (insumosSC.length === 0) {
+        setError('No hay insumos (sin mano de obra) para crear la SC.')
+        setCreandoSC(false)
+        return
+      }
+
+      // Número correlativo
+      const { data: ultimas } = await supabase.from('solicitudes').select('numero').eq('obra_id', obra.id).order('numero', { ascending: false }).limit(1)
+      const numero = ultimas?.[0]?.numero ? ultimas[0].numero + 1 : 1
+
+      const { data: solicitud, error: solError } = await supabase
+        .from('solicitudes').insert({
+          obra_id: obra.id,
+          numero,
+          usuario_id: perfil.id,
+          estado: 'pendiente',
+          observaciones: `Generada desde Calculadora de Rendimientos`,
+        }).select().single()
+      if (solError) throw new Error('Error creando solicitud')
+
+      const itemsSC = insumosSC.map(ins => ({
+        solicitud_id: solicitud.id,
+        descripcion: ins.descripcion,
+        unidad: ins.unidad || '',
+        cantidad: ins.cantidad,
+        es_otro: false,
+        explosion_item_id: null,
+      }))
+      await supabase.from('solicitud_items').insert(itemsSC)
+
+      setExito(`SC-${String(numero).padStart(3,'0')} creada con ${itemsSC.length} ítems.`)
+      setTareas([])
+      setVistaCalc(false)
+    } catch (err) {
+      setError(err.message)
+    }
+    setCreandoSC(false)
+  }
+
+  const CATS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'EQUIPOS', 'DIRECTOS FIJOS', 'SUBCONTRATOS', 'ANALISIS']
   const fmt  = (n) => n != null ? '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
   const fmtN = (n) => n != null ? Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'
 
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
 
-  // Agrupar para visualización
   const grupos = []
   let grupoActual = null
   for (const f of filas) {
-    if (f.tipo === 'item') {
-      grupoActual = { item: f, secciones: [] }
-      grupos.push(grupoActual)
-    } else if (grupoActual) {
-      grupoActual.secciones.push(f)
-    }
+    if (f.tipo === 'item') { grupoActual = { item: f, secciones: [] }; grupos.push(grupoActual) }
+    else if (grupoActual) grupoActual.secciones.push(f)
   }
+
+  const hayResultados = tareas.some(t => t.resultado && t.resultado.length > 0)
 
   return (
     <div>
@@ -293,12 +292,18 @@ function CostoExplotado({ obra, perfil }) {
         </div>
       )}
 
-      {/* Botón calculadora */}
-      {(esJefe || esAdmin) && filas.length > 0 && (
-        <div style={{ marginBottom: '20px' }}>
-          <button onClick={() => setVistaCalc(!vistaCalc)}
-            style={{ padding: '10px 20px', background: vistaCalc ? '#2563eb' : 'white', color: vistaCalc ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-            🧮 Calculadora de Rendimientos
+      {/* Botones */}
+      {filas.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {(esJefe || esAdmin) && (
+            <button onClick={() => { setVistaCalc(!vistaCalc); if (!vistaCalc && tareas.length === 0) agregarTarea() }}
+              style={{ padding: '10px 20px', background: vistaCalc ? '#2563eb' : 'white', color: vistaCalc ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+              🧮 Calculadora de Rendimientos
+            </button>
+          )}
+          <button onClick={() => setTablaVisible(!tablaVisible)}
+            style={{ padding: '10px 20px', background: 'white', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+            {tablaVisible ? '▲ Ocultar análisis' : '▼ Ver análisis de precios'}
           </button>
         </div>
       )}
@@ -309,198 +314,199 @@ function CostoExplotado({ obra, perfil }) {
       {/* Calculadora */}
       {vistaCalc && (
         <div style={{ marginBottom: '24px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Calculadora de Rendimientos</h4>
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ flex: 2, minWidth: '200px' }}>
-              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '4px' }}>Ítem</label>
-              <select value={itemSeleccionado?.codigo_item || ''} onChange={ev => {
-                const it = items.find(f => f.codigo_item === ev.target.value)
-                setItemSeleccionado(it || null)
-                setCantidadCalc(1)
-                setDiasCalc('')
-                setResultadoVisible(null)
-                setDetalleExpandido({})
-              }} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px' }}>
-                <option value="">Seleccioná un ítem...</option>
-                {items.map(f => <option key={f.codigo_item} value={f.codigo_item}>{f.codigo_item} — {f.nombre_item}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '12px', color: '#888' }}>
-                Cantidad {itemSeleccionado?.unidad && <span style={{ color: '#2563eb', fontWeight: '700' }}>({itemSeleccionado.unidad})</span>}
-              </label>
-              <input type="number" min="0.01" value={cantidadCalc}
-                onChange={ev => setCantidadCalc(parseFloat(ev.target.value) || 1)}
-                style={{ width: '100px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '12px', color: '#888' }}>Días <span style={{ color: '#aaa' }}>(opcional · 9 hs/día)</span></label>
-              <input type="number" min="1" value={diasCalc}
-                onChange={ev => setDiasCalc(ev.target.value)}
-                placeholder="—"
-                style={{ width: '80px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
-            </div>
-            <button
-              onClick={() => { setResultadoVisible(calcular()); setDetalleExpandido({}) }}
-              disabled={!itemSeleccionado}
-              style={{ padding: '8px 20px', background: itemSeleccionado ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: itemSeleccionado ? 'pointer' : 'not-allowed' }}>
-              Calcular
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h4 style={{ margin: 0, color: '#1e3a5f' }}>Calculadora de Rendimientos</h4>
+            {esJefe && hayResultados && (
+              <button onClick={crearSC} disabled={creandoSC}
+                style={{ padding: '8px 20px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: creandoSC ? 'not-allowed' : 'pointer', opacity: creandoSC ? 0.6 : 1 }}>
+                {creandoSC ? 'Creando...' : '🛒 Crear SC con estos materiales'}
+              </button>
+            )}
           </div>
 
-          {resultadoCalc.length > 0 && (
-            <>
-              {/* RESUMEN */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
-
-                {/* Mano de obra: por categoría con personas */}
-                {CATS.filter(cat => cat === 'MANO DE OBRA' && resultadoCalc.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => {
-                  const filasMO = resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat))
-                  return (
-                    <div key={cat} style={{ background: 'white', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', minWidth: '200px' }}>
-                      <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '700', marginBottom: '8px' }}>MANO DE OBRA</div>
-                      {filasMO.map((r, i) => (
-                        <div key={i} style={{ marginBottom: '6px' }}>
-                          <div style={{ fontSize: '12px', color: '#555' }}>{r.descripcion}</div>
-                          {r.personas != null
-                            ? <div style={{ fontWeight: '700', color: '#dc2626', fontSize: '15px' }}>{Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} personas</div>
-                            : null
-                          }
-                          <div style={{ fontSize: '11px', color: '#999' }}>{fmtN(r.cantidad_total)} hs totales · {fmt(r.total)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
-
-                {/* Materiales: total en pesos */}
-                {CATS.filter(cat => cat !== 'MANO DE OBRA' && resultadoCalc.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => {
-                  const totalCat = resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat)).reduce((a, r) => a + r.total, 0)
-                  return (
-                    <div key={cat} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', minWidth: '150px' }}>
-                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>{cat}</div>
-                      <div style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '15px' }}>{fmt(totalCat)}</div>
-                    </div>
-                  )
-                })}
-
-                {/* Total general */}
-                <div style={{ background: '#1e3a5f', borderRadius: '8px', padding: '12px 16px', minWidth: '150px' }}>
-                  <div style={{ fontSize: '11px', color: '#93c5fd', marginBottom: '4px' }}>TOTAL</div>
-                  <div style={{ fontWeight: '700', color: 'white', fontSize: '15px' }}>{fmt(resultadoCalc.reduce((a, r) => a + r.total, 0))}</div>
-                </div>
+          {tareas.map((tarea, ti) => (
+            <div key={tarea.id} style={{ marginBottom: '20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '13px' }}>Tarea {ti + 1}</span>
+                {tareas.length > 1 && (
+                  <button onClick={() => quitarTarea(tarea.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>✕</button>
+                )}
               </div>
 
-              {/* DETALLE expandible por categoría */}
-              {CATS.filter(cat => resultadoCalc.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => (
-                <div key={cat} style={{ marginBottom: '8px', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-                  <button
-                    onClick={() => setDetalleExpandido(prev => ({ ...prev, [cat]: !prev[cat] }))}
-                    style={{ width: '100%', background: '#dbeafe', padding: '8px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{cat}</span>
-                    <span>{detalleExpandido[cat] ? '▲ Ocultar' : '▼ Ver detalle'}</span>
-                  </button>
-                  {detalleExpandido[cat] && (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ background: '#f1f5f9' }}>
-                          <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
-                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
-                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant./Unit.</th>
-                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant. Total</th>
-                          {cat === 'MANO DE OBRA' && <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600', color: '#dc2626' }}>Personas</th>}
-                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Total $</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat)).map((r, i) => (
-                          <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '6px 10px' }}>{r.descripcion}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{r.unidad}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtN(r.cantidad_unit)}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmtN(r.cantidad_total)}</td>
-                            {cat === 'MANO DE OBRA' && (
-                              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#dc2626' }}>
-                                {r.personas != null ? Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
-                              </td>
-                            )}
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmt(r.total)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+              {/* Inputs */}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '12px' }}>
+                <div style={{ flex: 2, minWidth: '200px' }}>
+                  <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '4px' }}>Ítem</label>
+                  <select value={tarea.itemSeleccionado?.codigo_item || ''} onChange={ev => {
+                    const it = items.find(f => f.codigo_item === ev.target.value)
+                    actualizarTarea(tarea.id, 'itemSeleccionado', it || null)
+                  }} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px' }}>
+                    <option value="">Seleccioná un ítem...</option>
+                    {items.map(f => <option key={f.codigo_item} value={f.codigo_item}>{f.codigo_item} — {f.nombre_item}</option>)}
+                  </select>
                 </div>
-              ))}
-            </>
-          )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', color: '#888' }}>
+                    Cantidad {tarea.itemSeleccionado?.unidad && <span style={{ color: '#2563eb', fontWeight: '700' }}>({tarea.itemSeleccionado.unidad})</span>}
+                  </label>
+                  <input type="number" min="0.01" value={tarea.cantidad}
+                    onChange={ev => actualizarTarea(tarea.id, 'cantidad', parseFloat(ev.target.value) || 1)}
+                    style={{ width: '100px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', color: '#888' }}>Días <span style={{ color: '#aaa' }}>(opcional · 9 hs/día)</span></label>
+                  <input type="number" min="1" value={tarea.dias} placeholder="—"
+                    onChange={ev => actualizarTarea(tarea.id, 'dias', ev.target.value)}
+                    style={{ width: '80px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
+                </div>
+                <button onClick={() => calcularTareaId(tarea.id)} disabled={!tarea.itemSeleccionado}
+                  style={{ padding: '8px 20px', background: tarea.itemSeleccionado ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: tarea.itemSeleccionado ? 'pointer' : 'not-allowed' }}>
+                  Calcular
+                </button>
+              </div>
+
+              {/* Resultado de la tarea */}
+              {tarea.resultado && tarea.resultado.length > 0 && (
+                <>
+                  {/* Resumen */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    {CATS.filter(cat => tarea.resultado.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => {
+                      const esMO = cat === 'MANO DE OBRA'
+                      const filasCat = tarea.resultado.filter(r => r.categoria?.toUpperCase().startsWith(cat))
+                      const totalCat = filasCat.reduce((a, r) => a + r.total, 0)
+                      return (
+                        <div key={cat} style={{ background: '#f8fafc', border: '1px solid ' + (esMO ? '#fca5a5' : '#e2e8f0'), borderRadius: '8px', padding: '10px 14px', minWidth: '140px' }}>
+                          <div style={{ fontSize: '10px', color: esMO ? '#dc2626' : '#888', fontWeight: '700', marginBottom: '4px' }}>{cat}</div>
+                          {esMO ? (
+                            filasCat.map((r, i) => (
+                              <div key={i} style={{ marginBottom: '4px' }}>
+                                <div style={{ fontSize: '11px', color: '#555' }}>{r.descripcion}</div>
+                                {r.personas != null && <div style={{ fontWeight: '700', color: '#dc2626', fontSize: '14px' }}>{Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pers.</div>}
+                                <div style={{ fontSize: '10px', color: '#999' }}>{fmtN(r.cantidad_total)} hs</div>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '14px' }}>{fmt(totalCat)}</div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    <div style={{ background: '#1e3a5f', borderRadius: '8px', padding: '10px 14px', minWidth: '120px' }}>
+                      <div style={{ fontSize: '10px', color: '#93c5fd', marginBottom: '4px' }}>TOTAL</div>
+                      <div style={{ fontWeight: '700', color: 'white', fontSize: '14px' }}>{fmt(tarea.resultado.reduce((a, r) => a + r.total, 0))}</div>
+                    </div>
+                  </div>
+
+                  {/* Detalle expandible */}
+                  {CATS.filter(cat => tarea.resultado.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => (
+                    <div key={cat} style={{ marginBottom: '6px', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                      <button onClick={() => toggleDetalle(tarea.id, cat)}
+                        style={{ width: '100%', background: '#dbeafe', padding: '6px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{cat}</span>
+                        <span>{tarea.detalleExpandido[cat] ? '▲ Ocultar' : '▼ Ver detalle'}</span>
+                      </button>
+                      {tarea.detalleExpandido[cat] && (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                          <thead>
+                            <tr style={{ background: '#f1f5f9' }}>
+                              <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
+                              <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
+                              <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant./Unit.</th>
+                              <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant. Total</th>
+                              {cat === 'MANO DE OBRA' && <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600', color: '#dc2626' }}>Personas</th>}
+                              <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Total $</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tarea.resultado.filter(r => r.categoria?.toUpperCase().startsWith(cat)).map((r, i) => (
+                              <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '6px 10px' }}>{r.descripcion}</td>
+                                <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{r.unidad}</td>
+                                <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtN(r.cantidad_unit)}</td>
+                                <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmtN(r.cantidad_total)}</td>
+                                {cat === 'MANO DE OBRA' && (
+                                  <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#dc2626' }}>
+                                    {r.personas != null ? Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                                  </td>
+                                )}
+                                <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmt(r.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          ))}
+
+          {/* Botón agregar tarea */}
+          <button onClick={agregarTarea}
+            style={{ padding: '8px 20px', background: 'white', border: '1px dashed #2563eb', color: '#2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', width: '100%' }}>
+            + Agregar otra tarea
+          </button>
         </div>
       )}
 
-      {/* Tabla del costo explotado */}
-      {filas.length === 0 ? (
+      {/* Tabla análisis de precios */}
+      {tablaVisible && (
+        filas.length === 0 ? (
+          <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
+            {esAdmin ? 'Subí el Excel para ver el costo explotado.' : 'Aún no se cargó el costo explotado para esta obra.'}
+          </div>
+        ) : (
+          <div>
+            {grupos.map((g, gi) => {
+              const costoTotal = g.secciones.find(f => f.tipo === 'costo_costo')
+              return (
+                <div key={gi} style={{ marginBottom: '24px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ background: '#1e3a5f', color: 'white', padding: '10px 16px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: '700', fontSize: '13px', minWidth: '40px' }}>{g.item.codigo_item}</span>
+                    <span style={{ fontWeight: '700', fontSize: '14px', flex: 1 }}>{g.item.nombre_item}</span>
+                    {costoTotal?.total > 0 && <span style={{ fontWeight: '700', fontSize: '14px', color: '#93c5fd' }}>Costo-Costo: {fmt(costoTotal.total)}</span>}
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600', color: '#555' }}>Descripción</th>
+                        <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Unid.</th>
+                        <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>P. Unitario</th>
+                        <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Cantidad</th>
+                        <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.secciones.filter(f => f.tipo !== 'costo_costo').map((f, fi) => {
+                        const esCategoria = f.tipo === 'categoria'
+                        const esSubtotal  = f.tipo === 'subtotal'
+                        return (
+                          <tr key={fi} style={{ background: esCategoria ? '#dbeafe' : esSubtotal ? '#f1f5f9' : fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '6px 12px', fontWeight: esCategoria || esSubtotal ? '700' : '400', color: esCategoria ? '#1e3a5f' : 'inherit' }}>
+                              {esSubtotal ? 'SUBTOTAL' : f.descripcion || ''}
+                            </td>
+                            <td style={{ padding: '6px 12px', textAlign: 'right', color: '#888' }}>{esCategoria || esSubtotal ? '' : f.unidad || ''}</td>
+                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{esCategoria || esSubtotal ? '' : fmt(f.precio_unitario)}</td>
+                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{esCategoria || esSubtotal ? '' : fmtN(f.cantidad)}</td>
+                            <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: esSubtotal ? '700' : '400', color: esSubtotal ? '#1e3a5f' : '#111' }}>
+                              {esCategoria ? '' : fmt(f.total)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
+          </div>
+        )
+      )}
+
+      {filas.length === 0 && !tablaVisible && (
         <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
           {esAdmin ? 'Subí el Excel para ver el costo explotado.' : 'Aún no se cargó el costo explotado para esta obra.'}
-        </div>
-      ) : (
-        <div>
-          {grupos.map((g, gi) => {
-            const costoTotal = g.secciones.find(f => f.tipo === 'costo_costo')
-            return (
-              <div key={gi} style={{ marginBottom: '24px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                {/* Header del ítem */}
-                <div style={{ background: '#1e3a5f', color: 'white', padding: '10px 16px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: '700', fontSize: '13px', minWidth: '40px' }}>{g.item.codigo_item}</span>
-                  <span style={{ fontWeight: '700', fontSize: '14px', flex: 1 }}>{g.item.nombre_item}</span>
-                  {costoTotal?.total > 0 && (
-                    <span style={{ fontWeight: '700', fontSize: '14px', color: '#93c5fd' }}>
-                      Costo-Costo: {fmt(costoTotal.total)}
-                    </span>
-                  )}
-                </div>
-
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc' }}>
-                      <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600', color: '#555' }}>Descripción</th>
-                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Unid.</th>
-                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>P. Unitario</th>
-                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Cantidad</th>
-                      <th style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '600', color: '#555' }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {g.secciones.filter(f => f.tipo !== 'costo_costo').map((f, fi) => {
-                      const esCategoria = f.tipo === 'categoria'
-                      const esSubtotal  = f.tipo === 'subtotal'
-                      return (
-                        <tr key={fi} style={{
-                          background: esCategoria ? '#dbeafe' : esSubtotal ? '#f1f5f9' : fi % 2 === 0 ? 'white' : '#f9fafb',
-                          borderBottom: '1px solid #f1f5f9'
-                        }}>
-                          <td style={{ padding: '6px 12px', fontWeight: esCategoria || esSubtotal ? '700' : '400', color: esCategoria ? '#1e3a5f' : 'inherit' }}>
-                            {esSubtotal ? 'SUBTOTAL' : f.descripcion || ''}
-                          </td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', color: '#888' }}>
-                            {esCategoria || esSubtotal ? '' : f.unidad || ''}
-                          </td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>
-                            {esCategoria || esSubtotal ? '' : fmt(f.precio_unitario)}
-                          </td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>
-                            {esCategoria || esSubtotal ? '' : fmtN(f.cantidad)}
-                          </td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: esSubtotal ? '700' : '400', color: esSubtotal ? '#1e3a5f' : '#111' }}>
-                            {esCategoria ? '' : fmt(f.total)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
-          })}
         </div>
       )}
     </div>

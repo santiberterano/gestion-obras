@@ -281,12 +281,7 @@ function CostoExplotado({ obra, perfil }) {
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', color: '#888' }}>
-                    Cantidad {tarea.itemSeleccionado && (() => {
-                      const unidadItem = filas.find(f => f.codigo_item === tarea.itemSeleccionado.codigo_item && f.unidad)?.unidad
-                      return unidadItem ? <span style={{ color: '#2563eb', fontWeight: '700' }}>({unidadItem})</span> : null
-                    })()}
-                  </label>
+                  <label style={{ fontSize: '12px', color: '#888' }}>Cantidad</label>
                   <input type="number" min="0.01" value={tarea.cantidad}
                     onChange={ev => actualizarTarea(tarea.id, 'cantidad', parseFloat(ev.target.value) || 1)}
                     style={{ width: '100px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />

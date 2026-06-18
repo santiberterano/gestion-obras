@@ -12,7 +12,9 @@ function CostoExplotado({ obra, perfil }) {
   const [vistaCalc, setVistaCalc] = useState(false)
   const [itemSeleccionado, setItemSeleccionado] = useState(null)
   const [cantidadCalc, setCantidadCalc] = useState(1)
-  const [diasCalc, setDiasCalc] = useState(1)
+  const [diasCalc, setDiasCalc] = useState('')
+  const [resultadoVisible, setResultadoVisible] = useState(null)
+  const [detalleExpandido, setDetalleExpandido] = useState({})
   const inputRef = useRef()
 
   const esAdmin = perfil?.area === 'administracion'
@@ -246,7 +248,7 @@ function CostoExplotado({ obra, perfil }) {
       })
   }
 
-  const resultadoCalc = calcular()
+  const resultadoCalc = resultadoVisible || []
   const CATS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'EQUIPOS', 'DIRECTOS FIJOS', 'SUBCONTRATOS', 'ANALISIS']
 
   const resumenCalc = CATS.map(cat => ({
@@ -313,88 +315,129 @@ function CostoExplotado({ obra, perfil }) {
       {vistaCalc && (
         <div style={{ marginBottom: '24px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
           <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Calculadora de Rendimientos</h4>
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-            <select value={itemSeleccionado?.codigo_item || ''} onChange={ev => {
-              const it = items.find(f => f.codigo_item === ev.target.value)
-              setItemSeleccionado(it || null)
-              setCantidadCalc(1)
-              setDiasCalc(1)
-            }} style={{ flex: 2, minWidth: '200px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px' }}>
-              <option value="">Seleccioná un ítem...</option>
-              {items.map(f => <option key={f.codigo_item} value={f.codigo_item}>{f.codigo_item} — {f.nombre_item}</option>)}
-            </select>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '13px', color: '#555', whiteSpace: 'nowrap' }}>Cantidad:</label>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ flex: 2, minWidth: '200px' }}>
+              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '4px' }}>Ítem</label>
+              <select value={itemSeleccionado?.codigo_item || ''} onChange={ev => {
+                const it = items.find(f => f.codigo_item === ev.target.value)
+                setItemSeleccionado(it || null)
+                setCantidadCalc(1)
+                setDiasCalc('')
+                setResultadoVisible(null)
+                setDetalleExpandido({})
+              }} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px' }}>
+                <option value="">Seleccioná un ítem...</option>
+                {items.map(f => <option key={f.codigo_item} value={f.codigo_item}>{f.codigo_item} — {f.nombre_item}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', color: '#888' }}>
+                Cantidad {itemSeleccionado?.unidad && <span style={{ color: '#2563eb', fontWeight: '700' }}>({itemSeleccionado.unidad})</span>}
+              </label>
               <input type="number" min="0.01" value={cantidadCalc}
                 onChange={ev => setCantidadCalc(parseFloat(ev.target.value) || 1)}
                 style={{ width: '100px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
-              {itemSeleccionado?.unidad && <span style={{ fontSize: '13px', color: '#2563eb', fontWeight: '600' }}>{itemSeleccionado.unidad}</span>}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '13px', color: '#555', whiteSpace: 'nowrap' }}>Días:</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', color: '#888' }}>Días <span style={{ color: '#aaa' }}>(opcional · 9 hs/día)</span></label>
               <input type="number" min="1" value={diasCalc}
-                onChange={ev => setDiasCalc(parseFloat(ev.target.value) || 1)}
+                onChange={ev => setDiasCalc(ev.target.value)}
+                placeholder="—"
                 style={{ width: '80px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
-              <span style={{ fontSize: '12px', color: '#888' }}>días (9 hs/día)</span>
             </div>
+            <button
+              onClick={() => { setResultadoVisible(calcular()); setDetalleExpandido({}) }}
+              disabled={!itemSeleccionado}
+              style={{ padding: '8px 20px', background: itemSeleccionado ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: itemSeleccionado ? 'pointer' : 'not-allowed' }}>
+              Calcular
+            </button>
           </div>
 
           {resultadoCalc.length > 0 && (
             <>
-              {/* Resumen por categoría */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                {resumenCalc.map(r => (
-                  <div key={r.cat} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 16px', minWidth: '150px' }}>
-                    <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>{r.cat}</div>
-                    <div style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '14px' }}>{fmt(r.total)}</div>
-                  </div>
-                ))}
-                <div style={{ background: '#1e3a5f', borderRadius: '8px', padding: '10px 16px', minWidth: '150px' }}>
+              {/* RESUMEN */}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+
+                {/* Mano de obra: por categoría con personas */}
+                {CATS.filter(cat => cat === 'MANO DE OBRA' && resultadoCalc.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => {
+                  const filasMO = resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat))
+                  return (
+                    <div key={cat} style={{ background: 'white', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', minWidth: '200px' }}>
+                      <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '700', marginBottom: '8px' }}>MANO DE OBRA</div>
+                      {filasMO.map((r, i) => (
+                        <div key={i} style={{ marginBottom: '6px' }}>
+                          <div style={{ fontSize: '12px', color: '#555' }}>{r.descripcion}</div>
+                          {r.personas != null
+                            ? <div style={{ fontWeight: '700', color: '#dc2626', fontSize: '15px' }}>{Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} personas</div>
+                            : null
+                          }
+                          <div style={{ fontSize: '11px', color: '#999' }}>{fmtN(r.cantidad_total)} hs totales · {fmt(r.total)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+
+                {/* Materiales: total en pesos */}
+                {CATS.filter(cat => cat !== 'MANO DE OBRA' && resultadoCalc.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => {
+                  const totalCat = resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat)).reduce((a, r) => a + r.total, 0)
+                  return (
+                    <div key={cat} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', minWidth: '150px' }}>
+                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>{cat}</div>
+                      <div style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '15px' }}>{fmt(totalCat)}</div>
+                    </div>
+                  )
+                })}
+
+                {/* Total general */}
+                <div style={{ background: '#1e3a5f', borderRadius: '8px', padding: '12px 16px', minWidth: '150px' }}>
                   <div style={{ fontSize: '11px', color: '#93c5fd', marginBottom: '4px' }}>TOTAL</div>
-                  <div style={{ fontWeight: '700', color: 'white', fontSize: '14px' }}>{fmt(resultadoCalc.reduce((a, r) => a + r.total, 0))}</div>
+                  <div style={{ fontWeight: '700', color: 'white', fontSize: '15px' }}>{fmt(resultadoCalc.reduce((a, r) => a + r.total, 0))}</div>
                 </div>
               </div>
 
-              {/* Detalle por categoría */}
+              {/* DETALLE expandible por categoría */}
               {CATS.filter(cat => resultadoCalc.some(r => r.categoria?.toUpperCase().startsWith(cat))).map(cat => (
-                <div key={cat} style={{ marginBottom: '12px' }}>
-                  <div style={{ background: '#dbeafe', padding: '6px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px', borderRadius: '4px 4px 0 0' }}>{cat}</div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ background: '#f1f5f9' }}>
-                        <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
-                        <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
-                        <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>P. Unit.</th>
-                        <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant./Unit.</th>
-                        <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant. Total</th>
-                        {cat === 'MANO DE OBRA' && <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600', color: '#dc2626' }}>Personas</th>}
-                        <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat)).map((r, i) => (
-                        <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '6px 10px' }}>{r.descripcion}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{r.unidad}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmt(r.precio_unitario)}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtN(r.cantidad_unit)}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmtN(r.cantidad_total)}</td>
-                          {cat === 'MANO DE OBRA' && (
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#dc2626' }}>
-                              {r.personas != null ? Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
-                            </td>
-                          )}
-                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmt(r.total)}</td>
+                <div key={cat} style={{ marginBottom: '8px', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setDetalleExpandido(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                    style={{ width: '100%', background: '#dbeafe', padding: '8px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{cat}</span>
+                    <span>{detalleExpandido[cat] ? '▲ Ocultar' : '▼ Ver detalle'}</span>
+                  </button>
+                  {detalleExpandido[cat] && (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ background: '#f1f5f9' }}>
+                          <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant./Unit.</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant. Total</th>
+                          {cat === 'MANO DE OBRA' && <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600', color: '#dc2626' }}>Personas</th>}
+                          <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Total $</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {resultadoCalc.filter(r => r.categoria?.toUpperCase().startsWith(cat)).map((r, i) => (
+                          <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '6px 10px' }}>{r.descripcion}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', color: '#888' }}>{r.unidad}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtN(r.cantidad_unit)}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmtN(r.cantidad_total)}</td>
+                            {cat === 'MANO DE OBRA' && (
+                              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#dc2626' }}>
+                                {r.personas != null ? Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                              </td>
+                            )}
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmt(r.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               ))}
             </>
-          )}
-          {itemSeleccionado && resultadoCalc.length === 0 && (
-            <p style={{ color: '#aaa', fontSize: '13px' }}>No hay insumos cargados para este ítem.</p>
           )}
         </div>
       )}

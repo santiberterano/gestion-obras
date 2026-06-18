@@ -12,7 +12,7 @@ function CostoExplotado({ obra, perfil }) {
   const [vistaCalc, setVistaCalc] = useState(false)
   const [tablaVisible, setTablaVisible] = useState(false)
   const [tareas, setTareas] = useState([]) // array de { id, itemSeleccionado, cantidad, dias, resultado, detalleExpandido }
-  const [creandoSC, setCreandoSC] = useState(false)
+
   const inputRef = useRef()
 
   const esAdmin = perfil?.area === 'administracion'
@@ -194,64 +194,6 @@ function CostoExplotado({ obra, perfil }) {
     }))
   }
 
-  async function crearSC() {
-    setCreandoSC(true)
-    setError(null)
-    try {
-      // Recolectar todos los insumos de todas las tareas, excluyendo mano de obra
-      const insumosSC = []
-      for (const tarea of tareas) {
-        if (!tarea.resultado) continue
-        for (const r of tarea.resultado) {
-          if (r.esManoDeObra) continue
-          insumosSC.push({
-            descripcion: r.descripcion,
-            unidad: r.unidad,
-            cantidad: r.cantidad_total,
-            item_origen: tarea.itemSeleccionado?.nombre_item,
-          })
-        }
-      }
-
-      if (insumosSC.length === 0) {
-        setError('No hay insumos (sin mano de obra) para crear la SC.')
-        setCreandoSC(false)
-        return
-      }
-
-      // Número correlativo
-      const { data: ultimas } = await supabase.from('solicitudes').select('numero').eq('obra_id', obra.id).order('numero', { ascending: false }).limit(1)
-      const numero = ultimas?.[0]?.numero ? ultimas[0].numero + 1 : 1
-
-      const { data: solicitud, error: solError } = await supabase
-        .from('solicitudes').insert({
-          obra_id: obra.id,
-          numero,
-          usuario_id: perfil.id,
-          estado: 'pendiente',
-          observaciones: `Generada desde Calculadora de Rendimientos`,
-        }).select().single()
-      if (solError) throw new Error('Error creando solicitud')
-
-      const itemsSC = insumosSC.map(ins => ({
-        solicitud_id: solicitud.id,
-        descripcion: ins.descripcion,
-        unidad: ins.unidad || '',
-        cantidad: ins.cantidad,
-        es_otro: false,
-        explosion_item_id: null,
-      }))
-      await supabase.from('solicitud_items').insert(itemsSC)
-
-      setExito(`SC-${String(numero).padStart(3,'0')} creada con ${itemsSC.length} ítems.`)
-      setTareas([])
-      setVistaCalc(false)
-    } catch (err) {
-      setError(err.message)
-    }
-    setCreandoSC(false)
-  }
-
   const CATS = ['MANO DE OBRA', 'MATERIALES', 'ALQUILERES', 'EQUIPOS', 'DIRECTOS FIJOS', 'SUBCONTRATOS', 'ANALISIS']
   const fmt  = (n) => n != null ? '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
   const fmtN = (n) => n != null ? Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'
@@ -264,8 +206,6 @@ function CostoExplotado({ obra, perfil }) {
     if (f.tipo === 'item') { grupoActual = { item: f, secciones: [] }; grupos.push(grupoActual) }
     else if (grupoActual) grupoActual.secciones.push(f)
   }
-
-  const hayResultados = tareas.some(t => t.resultado && t.resultado.length > 0)
 
   return (
     <div>
@@ -316,12 +256,7 @@ function CostoExplotado({ obra, perfil }) {
         <div style={{ marginBottom: '24px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h4 style={{ margin: 0, color: '#1e3a5f' }}>Calculadora de Rendimientos</h4>
-            {esJefe && hayResultados && (
-              <button onClick={crearSC} disabled={creandoSC}
-                style={{ padding: '8px 20px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: creandoSC ? 'not-allowed' : 'pointer', opacity: creandoSC ? 0.6 : 1 }}>
-                {creandoSC ? 'Creando...' : '🛒 Crear SC con estos materiales'}
-              </button>
-            )}
+
           </div>
 
           {tareas.map((tarea, ti) => (
@@ -347,7 +282,10 @@ function CostoExplotado({ obra, perfil }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '12px', color: '#888' }}>
-                    Cantidad {tarea.itemSeleccionado?.unidad && <span style={{ color: '#2563eb', fontWeight: '700' }}>({tarea.itemSeleccionado.unidad})</span>}
+                    Cantidad {tarea.itemSeleccionado && (() => {
+                      const unidadItem = filas.find(f => f.codigo_item === tarea.itemSeleccionado.codigo_item && f.unidad)?.unidad
+                      return unidadItem ? <span style={{ color: '#2563eb', fontWeight: '700' }}>({unidadItem})</span> : null
+                    })()}
                   </label>
                   <input type="number" min="0.01" value={tarea.cantidad}
                     onChange={ev => actualizarTarea(tarea.id, 'cantidad', parseFloat(ev.target.value) || 1)}

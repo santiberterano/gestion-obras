@@ -81,7 +81,8 @@ function CostoExplotado({ obra, perfil }) {
           // Capturar unidad del ítem en col D de esta fila
           const unidadItem = r[3] != null && typeof r[3] === 'string' && !r[3].includes('P.Un') && !r[3].includes('Can.') ? String(r[3]).trim() : null
           if (unidadItem && codigoActual) {
-            const lastItem = filasParsed.filter(f => f.tipo === 'item' && f.codigo_item === codigoActual).slice(-1)[0]
+            const codActualUnidad = codigoActual
+            const lastItem = filasParsed.filter(f => f.tipo === 'item' && f.codigo_item === codActualUnidad).slice(-1)[0]
             if (lastItem) lastItem.unidad = unidadItem
           }
           continue

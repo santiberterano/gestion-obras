@@ -77,7 +77,15 @@ function CostoExplotado({ obra, perfil }) {
         const colF = typeof r[5] === 'number' ? r[5] : null
 
         if (!colBRaw && !colC && !colE && !colF) continue
-        if (colD.includes('P.Un') || colC.includes('P.Un') || colD.includes('Can.')) continue
+        if (colD.includes('P.Un') || colC.includes('P.Un') || colD.includes('Can.')) {
+          // Capturar unidad del ítem en col D de esta fila
+          const unidadItem = r[3] != null && typeof r[3] === 'string' && !r[3].includes('P.Un') && !r[3].includes('Can.') ? String(r[3]).trim() : null
+          if (unidadItem && codigoActual) {
+            const lastItem = filasParsed.filter(f => f.tipo === 'item' && f.codigo_item === codigoActual).slice(-1)[0]
+            if (lastItem) lastItem.unidad = unidadItem
+          }
+          continue
+        }
 
         const esItem      = colBRaw !== null && !isNaN(colBNum) && colBNum > 0 && colC
         const colCUpper   = colC.toUpperCase()

@@ -12,6 +12,7 @@ function CostoExplotado({ obra, perfil }) {
   const [vistaCalc, setVistaCalc] = useState(false)
   const [itemSeleccionado, setItemSeleccionado] = useState(null)
   const [cantidadCalc, setCantidadCalc] = useState(1)
+  const [diasCalc, setDiasCalc] = useState(1)
   const inputRef = useRef()
 
   const esAdmin = perfil?.area === 'administracion'
@@ -224,17 +225,25 @@ function CostoExplotado({ obra, perfil }) {
   // Calcular resultado de la calculadora
   function calcular() {
     if (!itemSeleccionado) return []
+    const horasDisponibles = diasCalc * 9
     return filas
       .filter(f => f.codigo_item === itemSeleccionado.codigo_item && f.tipo === 'insumo' && f.precio_unitario && f.cantidad)
-      .map(f => ({
-        categoria: f.categoria,
-        descripcion: f.descripcion,
-        unidad: f.unidad,
-        precio_unitario: f.precio_unitario,
-        cantidad_unit: f.cantidad,
-        cantidad_total: f.cantidad * cantidadCalc,
-        total: f.precio_unitario * f.cantidad * cantidadCalc,
-      }))
+      .map(f => {
+        const esManoDeObra = f.categoria?.toUpperCase().startsWith('MANO DE OBRA')
+        const cantidad_total = f.cantidad * cantidadCalc
+        const personas = esManoDeObra && horasDisponibles > 0 ? cantidad_total / horasDisponibles : null
+        return {
+          categoria: f.categoria,
+          descripcion: f.descripcion,
+          unidad: f.unidad,
+          precio_unitario: f.precio_unitario,
+          cantidad_unit: f.cantidad,
+          cantidad_total,
+          total: f.precio_unitario * cantidad_total,
+          personas,
+          esManoDeObra,
+        }
+      })
   }
 
   const resultadoCalc = calcular()
@@ -309,6 +318,7 @@ function CostoExplotado({ obra, perfil }) {
               const it = items.find(f => f.codigo_item === ev.target.value)
               setItemSeleccionado(it || null)
               setCantidadCalc(1)
+              setDiasCalc(1)
             }} style={{ flex: 2, minWidth: '200px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px' }}>
               <option value="">Seleccioná un ítem...</option>
               {items.map(f => <option key={f.codigo_item} value={f.codigo_item}>{f.codigo_item} — {f.nombre_item}</option>)}
@@ -318,7 +328,14 @@ function CostoExplotado({ obra, perfil }) {
               <input type="number" min="0.01" value={cantidadCalc}
                 onChange={ev => setCantidadCalc(parseFloat(ev.target.value) || 1)}
                 style={{ width: '100px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
-              {itemSeleccionado?.unidad && <span style={{ fontSize: '13px', color: '#888' }}>{itemSeleccionado.unidad}</span>}
+              {itemSeleccionado?.unidad && <span style={{ fontSize: '13px', color: '#2563eb', fontWeight: '600' }}>{itemSeleccionado.unidad}</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '13px', color: '#555', whiteSpace: 'nowrap' }}>Días:</label>
+              <input type="number" min="1" value={diasCalc}
+                onChange={ev => setDiasCalc(parseFloat(ev.target.value) || 1)}
+                style={{ width: '80px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', textAlign: 'right' }} />
+              <span style={{ fontSize: '12px', color: '#888' }}>días (9 hs/día)</span>
             </div>
           </div>
 
@@ -350,6 +367,7 @@ function CostoExplotado({ obra, perfil }) {
                         <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>P. Unit.</th>
                         <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant./Unit.</th>
                         <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Cant. Total</th>
+                        {cat === 'MANO DE OBRA' && <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600', color: '#dc2626' }}>Personas</th>}
                         <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>Total</th>
                       </tr>
                     </thead>
@@ -361,6 +379,11 @@ function CostoExplotado({ obra, perfil }) {
                           <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmt(r.precio_unitario)}</td>
                           <td style={{ padding: '6px 10px', textAlign: 'right' }}>{fmtN(r.cantidad_unit)}</td>
                           <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmtN(r.cantidad_total)}</td>
+                          {cat === 'MANO DE OBRA' && (
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#dc2626' }}>
+                              {r.personas != null ? Number(r.personas).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                            </td>
+                          )}
                           <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '600' }}>{fmt(r.total)}</td>
                         </tr>
                       ))}

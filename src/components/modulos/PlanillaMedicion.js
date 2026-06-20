@@ -13,7 +13,7 @@ function PlanillaMedicion({ obra, perfil }) {
   const [archivoListo, setArchivoListo] = useState(null)
   const [error, setError] = useState(null)
   const [exito, setExito] = useState(null)
-  const [vista, setVista] = useState(null) // 'proy_inicial' | 'proy_mensual' | 'definitiva'
+  const [vista, setVista] = useState(null)
   const [mesActivo, setMesActivo] = useState(null)
   const [porcentajes, setPorcentajes] = useState({})
   const [guardando, setGuardando] = useState(false)
@@ -130,21 +130,25 @@ function PlanillaMedicion({ obra, perfil }) {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Meses cargados
+  // Meses cargados por tipo
   const mesesProyInicial = [...new Set(avances.filter(a => a.tipo_registro === 'proy_inicial').map(a => a.mes))].sort((a,b) => a-b)
   const mesesProyMensual = [...new Set(avances.filter(a => a.tipo_registro === 'proy_mensual').map(a => a.mes))].sort((a,b) => a-b)
   const mesesDefinitivos = [...new Set(avances.filter(a => a.tipo_registro === 'definitivo').map(a => a.mes))].sort((a,b) => a-b)
 
-  const proximoMesJefe = mesesDefinitivos.length > 0 ? Math.max(...mesesDefinitivos) + 1 : (mesesProyMensual.length > 0 ? Math.max(...mesesProyMensual) : 1)
-  const proximoMesDef  = mesesDefinitivos.length > 0 ? Math.max(...mesesDefinitivos) + 1 : 1
+  // Próximos meses disponibles
+  const proximoMesPI  = mesesProyInicial.length > 0 ? Math.max(...mesesProyInicial) + 1 : 1
+  const proximoMesPM  = mesesProyMensual.length > 0 ? Math.max(...mesesProyMensual) + 1 : 1
+  const proximoMesDef = mesesDefinitivos.length > 0 ? Math.max(...mesesDefinitivos) + 1 : 1
 
-  const puedeProyMensual  = duracionMeses && proximoMesJefe <= duracionMeses && mesesProyInicial.includes(proximoMesJefe)
-  const puedeDefinitiva   = duracionMeses && proximoMesDef <= duracionMeses && mesesProyMensual.includes(proximoMesDef)
+  // Condiciones
+  const puedePI  = duracionMeses && proximoMesPI  <= duracionMeses
+  const puedePM  = duracionMeses && proximoMesPM  <= duracionMeses && mesesProyInicial.includes(proximoMesPM)
+  const puedeDef = duracionMeses && proximoMesDef <= duracionMeses && mesesProyMensual.includes(proximoMesDef)
 
   function abrirCarga(tipo) {
     let mes
-    if (tipo === 'proy_inicial') mes = proximoMesProyInicial
-    else if (tipo === 'proy_mensual') mes = proximoMesJefe
+    if (tipo === 'proy_inicial')  mes = proximoMesPI
+    else if (tipo === 'proy_mensual') mes = proximoMesPM
     else mes = proximoMesDef
     setMesActivo(mes)
     setPorcentajes({})
@@ -186,7 +190,7 @@ function PlanillaMedicion({ obra, perfil }) {
       const { error: insErr } = await supabase.from('planilla_avances').insert(registros)
       if (insErr) throw new Error('Error guardando avances: ' + insErr.message)
 
-      const labels = { proy_inicial: 'Proyección', proy_mensual: 'Proyección mensual', definitiva: 'Medición definitiva' }
+      const labels = { proy_inicial: 'Proyección inicial', proy_mensual: 'Proyección mensual', definitiva: 'Medición definitiva' }
       setExito(`${labels[vista]} Mes ${String(mesActivo).padStart(2,'0')} guardada correctamente.`)
       setVista(null)
       setPorcentajes({})
@@ -200,7 +204,9 @@ function PlanillaMedicion({ obra, perfil }) {
   function totalPorTipo(mes, tipo) {
     return avances.filter(a => a.tipo_registro === tipo && a.mes === mes).reduce((s, a) => s + (a.monto || 0), 0)
   }
-  const totalObra = items.filter(it => it.tipo === 'rubro').reduce((s, it) => s + (it.total || 0), 0)
+
+  const totalObra  = items.filter(it => it.tipo === 'rubro').reduce((s, it) => s + (it.total || 0), 0)
+  const todosMeses = [...new Set([...mesesProyInicial, ...mesesProyMensual, ...mesesDefinitivos])].sort((a,b) => a-b)
 
   const fmt    = (n) => n != null ? '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
   const fmtPct = (n) => n != null ? (Number(n) * 100).toFixed(1) + '%' : '-'
@@ -210,16 +216,9 @@ function PlanillaMedicion({ obra, perfil }) {
   const grupos = []
   let grupoActual = null
   for (const it of items) {
-    if (it.tipo === 'rubro') {
-      grupoActual = { rubro: it, items: [] }
-      grupos.push(grupoActual)
-    } else if (grupoActual) {
-      grupoActual.items.push(it)
-    }
+    if (it.tipo === 'rubro') { grupoActual = { rubro: it, items: [] }; grupos.push(grupoActual) }
+    else if (grupoActual) grupoActual.items.push(it)
   }
-
-  // Todos los meses que tienen al menos un tipo cargado
-  const todosMeses = [...new Set([...mesesProyInicial, ...mesesProyMensual, ...mesesDefinitivos])].sort((a,b) => a-b)
 
   return (
     <div>
@@ -256,11 +255,9 @@ function PlanillaMedicion({ obra, perfil }) {
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label style={{ fontSize: '13px', color: '#555', whiteSpace: 'nowrap' }}>Duración (meses):</label>
-                  <input
-                    type="number" min="1" max="60" value={duracionInput}
+                  <input type="number" min="1" max="60" value={duracionInput}
                     onChange={ev => setDuracionInput(ev.target.value)}
-                    style={{ width: '70px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }}
-                  />
+                    style={{ width: '70px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }} />
                 </div>
                 <button onClick={confirmarCarga} disabled={subiendo || !duracionInput}
                   style={{ padding: '8px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: subiendo ? 'not-allowed' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
@@ -272,38 +269,27 @@ function PlanillaMedicion({ obra, perfil }) {
         </div>
       )}
 
-      {/* Botones de carga */}
-      {items.length > 0 && (
+      {/* Botones de carga — solo jefe de obra */}
+      {esJefe && items.length > 0 && (
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          {esAdmin && (
-            <button onClick={() => puedeProyInicial && abrirCarga('proy_inicial')}
-              disabled={!puedeProyInicial}
-              style={{ padding: '10px 18px', background: puedeProyInicial ? 'white' : '#f3f4f6', color: puedeProyInicial ? '#2563eb' : '#aaa', border: '1px solid ' + (puedeProyInicial ? '#2563eb' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: puedeProyInicial ? 'pointer' : 'not-allowed' }}>
-              📋 Proyección Mes {String(proximoMesProyInicial).padStart(2,'0')}
-              {!puedeProyInicial && duracionMeses && ' (límite alcanzado)'}
-            </button>
-          )}
-          {esJefe && (
-            <>
-              <button onClick={() => abrirCarga('proy_inicial')}
-                disabled={!duracionMeses || mesesProyInicial.length >= duracionMeses}
-                style={{ padding: '10px 18px', background: 'white', color: '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
-                📋 Proyección Mes {String(mesesProyInicial.length > 0 ? Math.max(...mesesProyInicial) + 1 : 1).padStart(2,'0')}
-              </button>
-              <button onClick={() => puedeProyMensual && abrirCarga('proy_mensual')}
-                disabled={!puedeProyMensual}
-                title={!puedeProyMensual ? (mesesProyInicial.includes(proximoMesJefe) ? '' : `Falta proyección inicial del Mes ${String(proximoMesJefe).padStart(2,'0')}`) : ''}
-                style={{ padding: '10px 18px', background: puedeProyMensual ? 'white' : '#f3f4f6', color: puedeProyMensual ? '#2563eb' : '#aaa', border: '1px solid ' + (puedeProyMensual ? '#2563eb' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: puedeProyMensual ? 'pointer' : 'not-allowed' }}>
-                📊 Proyección Mensual Mes {String(proximoMesJefe).padStart(2,'0')}
-              </button>
-              <button onClick={() => puedeDefinitiva && abrirCarga('definitiva')}
-                disabled={!puedeDefinitiva}
-                title={!puedeDefinitiva ? `Falta proyección mensual del Mes ${String(proximoMesDef).padStart(2,'0')}` : ''}
-                style={{ padding: '10px 18px', background: puedeDefinitiva ? 'white' : '#f3f4f6', color: puedeDefinitiva ? '#16a34a' : '#aaa', border: '1px solid ' + (puedeDefinitiva ? '#16a34a' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: puedeDefinitiva ? 'pointer' : 'not-allowed' }}>
-                ✅ Definitiva Mes {String(proximoMesDef).padStart(2,'0')}
-              </button>
-            </>
-          )}
+          <button onClick={() => puedePI && abrirCarga('proy_inicial')}
+            disabled={!puedePI}
+            style={{ padding: '10px 18px', background: puedePI ? 'white' : '#f3f4f6', color: puedePI ? '#2563eb' : '#aaa', border: '1px solid ' + (puedePI ? '#2563eb' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: puedePI ? 'pointer' : 'not-allowed' }}>
+            📋 Proyección Inicial Mes {String(proximoMesPI).padStart(2,'0')}
+            {!puedePI && duracionMeses && ' (límite alcanzado)'}
+          </button>
+          <button onClick={() => puedePM && abrirCarga('proy_mensual')}
+            disabled={!puedePM}
+            title={!puedePM && !mesesProyInicial.includes(proximoMesPM) ? `Falta Proyección Inicial del Mes ${String(proximoMesPM).padStart(2,'0')}` : ''}
+            style={{ padding: '10px 18px', background: puedePM ? 'white' : '#f3f4f6', color: puedePM ? '#2563eb' : '#aaa', border: '1px solid ' + (puedePM ? '#2563eb' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: puedePM ? 'pointer' : 'not-allowed' }}>
+            📊 Proyección Mensual Mes {String(proximoMesPM).padStart(2,'0')}
+          </button>
+          <button onClick={() => puedeDef && abrirCarga('definitiva')}
+            disabled={!puedeDef}
+            title={!puedeDef && !mesesProyMensual.includes(proximoMesDef) ? `Falta Proyección Mensual del Mes ${String(proximoMesDef).padStart(2,'0')}` : ''}
+            style={{ padding: '10px 18px', background: puedeDef ? 'white' : '#f3f4f6', color: puedeDef ? '#16a34a' : '#aaa', border: '1px solid ' + (puedeDef ? '#16a34a' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: puedeDef ? 'pointer' : 'not-allowed' }}>
+            ✅ Definitiva Mes {String(proximoMesDef).padStart(2,'0')}
+          </button>
         </div>
       )}
 
@@ -317,7 +303,7 @@ function PlanillaMedicion({ obra, perfil }) {
             <h4 style={{ margin: 0, color: '#1e3a5f' }}>
               {vista === 'proy_inicial'  && `Proyección Inicial — Mes ${String(mesActivo).padStart(2,'0')}`}
               {vista === 'proy_mensual'  && `Proyección Mensual — Mes ${String(mesActivo).padStart(2,'0')}`}
-              {vista === 'definitiva'    && `Medición Definitiva — Mes ${String(mesActivo).padStart(2,'0')}`}
+              {vista === 'definitiva'    && `Medición Definitiva — Mes ${String(mesActivo).padStart(2,'00')}`}
             </h4>
             <button onClick={() => { setVista(null); setPorcentajes({}) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '18px' }}>✕</button>
@@ -352,12 +338,10 @@ function PlanillaMedicion({ obra, perfil }) {
                           <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.total)}</td>
                           <td style={{ padding: '6px 12px', textAlign: 'right' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                              <input
-                                type="number" min="0" max="100" step="0.01"
+                              <input type="number" min="0" max="100" step="0.01"
                                 value={pctStr}
                                 onChange={ev => setPorcentajes(prev => ({ ...prev, [it.id]: ev.target.value }))}
-                                style={{ width: '70px', padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', textAlign: 'right' }}
-                              />
+                                style={{ width: '70px', padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', textAlign: 'right' }} />
                               <span style={{ color: '#888', fontSize: '12px' }}>%</span>
                             </div>
                           </td>
@@ -437,9 +421,9 @@ function PlanillaMedicion({ obra, perfil }) {
                     {mostrarPrecios && <td colSpan={3} />}
                     {mostrarPrecios && <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>{fmt(g.rubro.total)}</td>}
                     {todosMeses.map(m => {
-                      const sumaPI = g.items.reduce((s, it) => { const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'proy_inicial' && a.mes === m); return s + (av?.monto || 0) }, 0)
-                      const sumaPM = g.items.reduce((s, it) => { const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'proy_mensual' && a.mes === m); return s + (av?.monto || 0) }, 0)
-                      const sumaDef = g.items.reduce((s, it) => { const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'definitivo' && a.mes === m); return s + (av?.monto || 0) }, 0)
+                      const sumaPI  = g.items.reduce((s, it) => { const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'proy_inicial'  && a.mes === m); return s + (av?.monto || 0) }, 0)
+                      const sumaPM  = g.items.reduce((s, it) => { const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'proy_mensual'  && a.mes === m); return s + (av?.monto || 0) }, 0)
+                      const sumaDef = g.items.reduce((s, it) => { const av = avances.find(a => a.planilla_item_id === it.id && a.tipo_registro === 'definitivo'    && a.mes === m); return s + (av?.monto || 0) }, 0)
                       return (
                         <React.Fragment key={m}>
                           {mesesProyInicial.includes(m) && <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>{fmt(sumaPI)}</td>}

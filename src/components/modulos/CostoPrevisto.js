@@ -481,15 +481,24 @@ function CostoPrevisto({ obra, perfil }) {
                                 <td colSpan={3} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
                               </tr>
                             )}
-                            {g.items.filter(f => f.tipo === 'item' && f.total).map((f, fi) => (
-                              <tr key={fi} style={{ background: indirectos[f.id] ? '#fef9c3' : fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '7px 12px', textAlign: 'center' }}>
-                                  <input type="checkbox" checked={!!indirectos[f.id]} onChange={() => toggleIndirecto(f.id)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                                </td>
-                                <td style={{ padding: '7px 12px', color: '#666' }}>{f.codigo}</td>
-                                <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
-                                <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600' }}>${fmt(f.total)}</td>
-                              </tr>
+                            {g.items.filter(f => f.tipo === 'titulo' || (f.tipo === 'item' && f.total)).map((f, fi) => (
+                              f.tipo === 'titulo' ? (
+                                <tr key={fi} style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                  <td />
+                                  <td style={{ padding: '7px 12px', color: '#1e3a5f', fontWeight: '700', fontSize: '12px' }}>{f.codigo}</td>
+                                  <td style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{f.descripcion}</td>
+                                  <td />
+                                </tr>
+                              ) : (
+                                <tr key={fi} style={{ background: indirectos[f.id] ? '#fef9c3' : fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '7px 12px', textAlign: 'center' }}>
+                                    <input type="checkbox" checked={!!indirectos[f.id]} onChange={() => toggleIndirecto(f.id)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                                  </td>
+                                  <td style={{ padding: '7px 12px', color: '#666' }}>{f.codigo}</td>
+                                  <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
+                                  <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600' }}>${fmt(f.total)}</td>
+                                </tr>
+                              )
                             ))}
                           </React.Fragment>
                         ))}
@@ -538,15 +547,41 @@ function CostoPrevisto({ obra, perfil }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {calcularPlanilla().map((f, i) => (
-                              <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '6px 12px' }}>{f.descripcion}</td>
-                                <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.total)}</td>
-                                <td style={{ padding: '6px 12px', textAlign: 'right', color: '#ca8a04' }}>${fmt(f.indirectos_absorbidos)}</td>
-                                <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.costo_ajustado)}</td>
-                                <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#16a34a' }}>${fmt(f.precio_venta)}</td>
-                              </tr>
-                            ))}
+                            {(() => {
+                              const planillaCalc = calcularPlanilla()
+                              const planillaCalcMap = {}
+                              planillaCalc.forEach(f => { planillaCalcMap[f.id] = f })
+                              const rows = []
+                              for (const fila of filas) {
+                                if (fila.tipo === 'titulo') {
+                                  const idxT = filas.indexOf(fila)
+                                  const idxN = filas.findIndex((x, i) => i > idxT && (x.tipo === 'titulo' || x.tipo === 'rubro'))
+                                  const sub = filas.slice(idxT + 1, idxN === -1 ? undefined : idxN)
+                                  const tieneItems = sub.some(f => planillaCalcMap[f.id])
+                                  if (!tieneItems) continue
+                                  const totalTitulo = sub.reduce((s, f) => s + (planillaCalcMap[f.id]?.precio_venta || 0), 0)
+                                  rows.push(
+                                    <tr key={'t-'+fila.id} style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                      <td style={{ padding: '6px 12px', fontWeight: '700', color: '#1e3a5f' }}>{fila.descripcion}</td>
+                                      <td /><td /><td />
+                                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>${fmt(totalTitulo)}</td>
+                                    </tr>
+                                  )
+                                } else if (fila.tipo === 'item' && planillaCalcMap[fila.id]) {
+                                  const f = planillaCalcMap[fila.id]
+                                  rows.push(
+                                    <tr key={'i-'+fila.id} style={{ background: rows.length % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                      <td style={{ padding: '6px 12px' }}>{f.descripcion}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.total)}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'right', color: '#ca8a04' }}>${fmt(f.indirectos_absorbidos)}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.costo_ajustado)}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#16a34a' }}>${fmt(f.precio_venta)}</td>
+                                    </tr>
+                                  )
+                                }
+                              }
+                              return rows
+                            })()}
                             <tr style={{ background: '#1e3a5f' }}>
                               <td style={{ padding: '8px 12px', fontWeight: '700', color: 'white' }}>TOTAL</td>
                               <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.total,0))}</td>

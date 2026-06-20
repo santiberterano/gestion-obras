@@ -234,6 +234,20 @@ function CostoPrevisto({ obra, perfil }) {
             costo_ajustado: null, precio_venta: totalRubro,
           })
           orden++
+        } else if (fila.tipo === 'titulo') {
+          const idxTitulo = filas.indexOf(fila)
+          const idxSigTitulo = filas.findIndex((x, i) => i > idxTitulo && (x.tipo === 'titulo' || x.tipo === 'rubro'))
+          const filasDelTitulo = filas.slice(idxTitulo + 1, idxSigTitulo === -1 ? undefined : idxSigTitulo)
+          const tieneItems = filasDelTitulo.some(f => planillaMap[f.id])
+          if (!tieneItems) continue
+          itemsConRubro.push({
+            obra_id: obra.id, costo_previsto_id: fila.id, orden,
+            tipo: 'titulo', codigo: fila.codigo, descripcion: fila.descripcion,
+            unidad: null, cantidad: null, precio_unitario: null,
+            costo_original: null, indirectos_absorbidos: null,
+            costo_ajustado: null, precio_venta: null,
+          })
+          orden++
         } else if (fila.tipo === 'item' && planillaMap[fila.id]) {
           const it = planillaMap[fila.id]
           itemsConRubro.push({
@@ -297,10 +311,10 @@ function CostoPrevisto({ obra, perfil }) {
     const filasDatos = planillaGenerada.map(it => [
       it.codigo || '',
       it.descripcion,
-      it.unidad || '',
-      it.cantidad || '',
+      it.tipo === 'titulo' ? '' : it.unidad || '',
+      it.tipo === 'titulo' ? '' : (it.cantidad || ''),
       it.tipo === 'item' && it.cantidad ? it.precio_venta / it.cantidad : '',
-      it.precio_venta || 0,
+      it.tipo === 'titulo' ? '' : (it.precio_venta || 0),
     ])
 
     const ws = XLSX.utils.aoa_to_sheet([...titulo, ...filasDatos])
@@ -588,12 +602,12 @@ function CostoPrevisto({ obra, perfil }) {
                         </thead>
                         <tbody>
                           {planillaGenerada.map((f, i) => (
-                            <tr key={i} style={{ background: f.tipo === 'rubro' ? '#dbeafe' : i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '7px 12px', fontWeight: f.tipo === 'rubro' ? '700' : '400', color: f.tipo === 'rubro' ? '#1e3a5f' : 'inherit' }}>{f.descripcion}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{f.tipo === 'rubro' ? '' : f.unidad || ''}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right' }}>{f.tipo === 'rubro' ? '' : fmt(f.cantidad)}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right' }}>{f.tipo === 'rubro' ? '' : (f.cantidad ? fmt(f.precio_venta / f.cantidad) : '-')}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: f.tipo === 'rubro' ? '#1e3a5f' : '#111' }}>${fmt(f.precio_venta)}</td>
+                            <tr key={i} style={{ background: f.tipo === 'rubro' ? '#dbeafe' : f.tipo === 'titulo' ? '#f8fafc' : i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: f.tipo === 'titulo' ? '1px solid #e2e8f0' : '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '7px 12px', fontWeight: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '700' : '400', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '#1e3a5f' : 'inherit' }}>{f.descripcion}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : f.unidad || ''}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : fmt(f.cantidad)}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : (f.cantidad ? fmt(f.precio_venta / f.cantidad) : '-')}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '#1e3a5f' : '#111' }}>{f.tipo === 'titulo' ? '' : '$' + fmt(f.precio_venta)}</td>
                             </tr>
                           ))}
                           <tr style={{ background: '#1e3a5f' }}>

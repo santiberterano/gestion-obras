@@ -248,6 +248,9 @@ function CostoPrevisto({ obra, perfil }) {
       }
 
       // Guardar planilla_items
+      console.log('itemsConRubro:', itemsConRubro)
+console.log('planilla:', planilla)
+console.log('rubros:', rubros)
       await supabase.from('planilla_items').delete().eq('obra_id', obra.id)
       const { error: piErr } = await supabase.from('planilla_items').insert(itemsConRubro)
       if (piErr) throw new Error('Error guardando planilla: ' + piErr.message)

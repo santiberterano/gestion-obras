@@ -135,13 +135,11 @@ function PlanillaMedicion({ obra, perfil }) {
   const mesesProyMensual = [...new Set(avances.filter(a => a.tipo_registro === 'proy_mensual').map(a => a.mes))].sort((a,b) => a-b)
   const mesesDefinitivos = [...new Set(avances.filter(a => a.tipo_registro === 'definitivo').map(a => a.mes))].sort((a,b) => a-b)
 
-  const proximoMesProyInicial = mesesProyInicial.length > 0 ? Math.max(...mesesProyInicial) + 1 : 1
   const proximoMesJefe = mesesDefinitivos.length > 0 ? Math.max(...mesesDefinitivos) + 1 : (mesesProyMensual.length > 0 ? Math.max(...mesesProyMensual) : 1)
   const proximoMesDef  = mesesDefinitivos.length > 0 ? Math.max(...mesesDefinitivos) + 1 : 1
 
   const puedeProyMensual  = duracionMeses && proximoMesJefe <= duracionMeses && mesesProyInicial.includes(proximoMesJefe)
   const puedeDefinitiva   = duracionMeses && proximoMesDef <= duracionMeses && mesesProyMensual.includes(proximoMesDef)
-  const puedeProyInicial  = duracionMeses && proximoMesProyInicial <= duracionMeses
 
   function abrirCarga(tipo) {
     let mes
@@ -287,6 +285,11 @@ function PlanillaMedicion({ obra, perfil }) {
           )}
           {esJefe && (
             <>
+              <button onClick={() => abrirCarga('proy_inicial')}
+                disabled={!duracionMeses || mesesProyInicial.length >= duracionMeses}
+                style={{ padding: '10px 18px', background: 'white', color: '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+                📋 Proyección Mes {String(mesesProyInicial.length > 0 ? Math.max(...mesesProyInicial) + 1 : 1).padStart(2,'0')}
+              </button>
               <button onClick={() => puedeProyMensual && abrirCarga('proy_mensual')}
                 disabled={!puedeProyMensual}
                 title={!puedeProyMensual ? (mesesProyInicial.includes(proximoMesJefe) ? '' : `Falta proyección inicial del Mes ${String(proximoMesJefe).padStart(2,'0')}`) : ''}

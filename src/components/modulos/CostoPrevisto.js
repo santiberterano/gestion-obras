@@ -211,34 +211,36 @@ function CostoPrevisto({ obra, perfil }) {
         await supabase.from('planilla_indirectos').insert(idsInd.map(id => ({ obra_id: obra.id, costo_previsto_id: id })))
       }
 
-      // Armar items con rubros
-      const rubros = filas.filter(f => f.tipo === 'rubro')
+      // Armar items con rubros — recorriendo filas en orden
+      const planillaMap = {}
+      planilla.forEach(f => { planillaMap[f.id] = f })
       const itemsConRubro = []
       let orden = 0
 
-      for (const rubro of rubros) {
-        const idxRubro = filas.findIndex(x => x.id === rubro.id)
-        const idxSigRubro = filas.findIndex((x, i) => i > idxRubro && x.tipo === 'rubro')
-        const itemsDelRubro = planilla.filter(f => {
-          const idxItem = filas.findIndex(x => x.id === f.id)
-          return idxItem > idxRubro && (idxSigRubro === -1 || idxItem < idxSigRubro)
-        })
-        if (itemsDelRubro.length === 0) continue
-        const totalRubro = itemsDelRubro.reduce((s, f) => s + f.precio_venta, 0)
-        itemsConRubro.push({
-          obra_id: obra.id, costo_previsto_id: rubro.id, orden,
-          tipo: 'rubro', codigo: null, descripcion: rubro.descripcion,
-          unidad: null, cantidad: null, precio_unitario: null,
-          costo_original: null, indirectos_absorbidos: null,
-          costo_ajustado: null, precio_venta: totalRubro,
-        })
-        orden++
-        for (const it of itemsDelRubro) {
+      for (const fila of filas) {
+        if (fila.tipo === 'rubro') {
+          // Buscar si tiene ítems certificables debajo
+          const idxRubro = filas.indexOf(fila)
+          const idxSigRubro = filas.findIndex((x, i) => i > idxRubro && x.tipo === 'rubro')
+          const filasDelRubro = filas.slice(idxRubro + 1, idxSigRubro === -1 ? undefined : idxSigRubro)
+          const tieneItems = filasDelRubro.some(f => planillaMap[f.id])
+          if (!tieneItems) continue
+          const totalRubro = filasDelRubro.reduce((s, f) => s + (planillaMap[f.id]?.precio_venta || 0), 0)
           itemsConRubro.push({
-            obra_id: obra.id, costo_previsto_id: it.id, orden,
-            tipo: 'item', codigo: it.codigo, descripcion: it.descripcion,
-            unidad: it.unidad, cantidad: it.cantidad, precio_unitario: it.precio_unitario,
-            costo_original: it.total,
+            obra_id: obra.id, costo_previsto_id: fila.id, orden,
+            tipo: 'rubro', codigo: null, descripcion: fila.descripcion,
+            unidad: null, cantidad: null, precio_unitario: null,
+            costo_original: null, indirectos_absorbidos: null,
+            costo_ajustado: null, precio_venta: totalRubro,
+          })
+          orden++
+        } else if (fila.tipo === 'item' && planillaMap[fila.id]) {
+          const it = planillaMap[fila.id]
+          itemsConRubro.push({
+            obra_id: obra.id, costo_previsto_id: fila.id, orden,
+            tipo: 'item', codigo: fila.codigo, descripcion: fila.descripcion,
+            unidad: fila.unidad, cantidad: fila.cantidad, precio_unitario: fila.precio_unitario,
+            costo_original: fila.total,
             indirectos_absorbidos: it.indirectos_absorbidos,
             costo_ajustado: it.costo_ajustado,
             precio_venta: it.precio_venta,
@@ -248,9 +250,6 @@ function CostoPrevisto({ obra, perfil }) {
       }
 
       // Guardar planilla_items
-      console.log('itemsConRubro:', itemsConRubro)
-console.log('planilla:', planilla)
-console.log('rubros:', rubros)
       await supabase.from('planilla_items').delete().eq('obra_id', obra.id)
       const { error: piErr } = await supabase.from('planilla_items').insert(itemsConRubro)
       if (piErr) throw new Error('Error guardando planilla: ' + piErr.message)

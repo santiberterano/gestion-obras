@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../supabaseClient'
 
-function CostoPrevisto({ obra, perfil }) {
+function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
   const [filas, setFilas] = useState([])
   const [meta, setMeta] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -353,7 +353,7 @@ function CostoPrevisto({ obra, perfil }) {
         {esAdmin && filas.length > 0 && (
           <button onClick={() => { setSeccion('wizard'); cargarConfigPlanilla() }}
             style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'wizard' ? '2px solid #2563eb' : '2px solid transparent', color: seccion === 'wizard' ? '#2563eb' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
-            Generar Planilla de Medición
+            Generar Planilla de Cotización
           </button>
         )}
       </div>
@@ -609,8 +609,8 @@ function CostoPrevisto({ obra, perfil }) {
               {pasoWizard === 3 && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-                    <h4 style={{ color: '#1e3a5f', margin: 0 }}>Planilla de Medición generada</h4>
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <h4 style={{ color: '#1e3a5f', margin: 0 }}>Planilla de Cotización generada</h4>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', color: '#555' }}>
                         ✏️ Modificar
                       </button>
@@ -618,6 +618,12 @@ function CostoPrevisto({ obra, perfil }) {
                         style={{ padding: '8px 20px', background: planillaGenerada.length > 0 ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: planillaGenerada.length > 0 ? 'pointer' : 'not-allowed' }}>
                         ⬇ Descargar Excel
                       </button>
+                      {onIrAPlanilla && (
+                        <button onClick={onIrAPlanilla}
+                          style={{ padding: '8px 20px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+                          Ver Planilla de Medición →
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -666,7 +672,7 @@ function CostoPrevisto({ obra, perfil }) {
                   )}
 
                   <div style={{ marginTop: '16px', padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '13px', color: '#16a34a' }}>
-                    ✓ La planilla está disponible en el módulo <b>Planilla de Medición</b> para cargar avances.
+                    ✓ La planilla de cotización fue guardada. Usá el botón de arriba para ir a la Planilla de Medición.
                   </div>
                 </div>
               )}

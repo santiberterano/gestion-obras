@@ -9,13 +9,14 @@ function CostoPrevisto({ obra, perfil }) {
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState(null)
   const [exito, setExito] = useState(null)
-  const [seccion, setSeccion] = useState('ver') // 'ver' | 'wizard'
-  const [pasoWizard, setPasoWizard] = useState(1) // 1 | 2 | 3
-  const [indirectos, setIndirectos] = useState({}) // { id: true/false }
+  const [seccion, setSeccion] = useState('ver')
+  const [pasoWizard, setPasoWizard] = useState(1)
+  const [indirectos, setIndirectos] = useState({})
   const [coeficiente, setCoeficiente] = useState('')
   const [duracionMeses, setDuracionMeses] = useState('')
   const [planillaGenerada, setPlanillaGenerada] = useState([])
   const [guardandoPlanilla, setGuardandoPlanilla] = useState(false)
+  const [cargandoConfig, setCargandoConfig] = useState(false)
   const inputRef = useRef()
 
   const esAdmin = perfil?.area === 'administracion'
@@ -41,6 +42,47 @@ function CostoPrevisto({ obra, perfil }) {
       setFilas(data)
     }
     setCargando(false)
+  }
+
+  async function cargarConfigPlanilla() {
+    setCargandoConfig(true)
+    try {
+      const { data: config } = await supabase
+        .from('planilla_config')
+        .select('*')
+        .eq('obra_id', obra.id)
+        .maybeSingle()
+
+      const { data: inds } = await supabase
+        .from('planilla_indirectos')
+        .select('*')
+        .eq('obra_id', obra.id)
+
+      const { data: planItems } = await supabase
+        .from('planilla_items')
+        .select('*')
+        .eq('obra_id', obra.id)
+        .order('orden', { ascending: true })
+
+      if (config) {
+        setCoeficiente(String(config.coeficiente))
+        setDuracionMeses(String(config.duracion_meses || ''))
+      }
+      if (inds && inds.length > 0) {
+        const indObj = {}
+        inds.forEach(i => { indObj[i.costo_previsto_id] = true })
+        setIndirectos(indObj)
+      }
+      if (planItems && planItems.length > 0) {
+        setPlanillaGenerada(planItems)
+        setPasoWizard(3)
+      } else {
+        setPasoWizard(1)
+      }
+    } catch (err) {
+      console.error('Error cargando config:', err)
+    }
+    setCargandoConfig(false)
   }
 
   async function handleArchivo(e) {
@@ -91,7 +133,7 @@ function CostoPrevisto({ obra, perfil }) {
         const esSubtotal = !codigo && !descripcion && total
 
         let tipo = 'item'
-        if (esRubro)    tipo = 'rubro'
+        if (esRubro)         tipo = 'rubro'
         else if (esTitulo)   tipo = 'titulo'
         else if (esSubtotal) tipo = 'subtotal'
 
@@ -122,7 +164,6 @@ function CostoPrevisto({ obra, perfil }) {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Solo ítems reales (no rubros, títulos, subtotales)
   const itemsReales = filas.filter(f => f.tipo === 'item' && f.total)
 
   function toggleIndirecto(id) {
@@ -143,12 +184,7 @@ function CostoPrevisto({ obra, perfil }) {
       const indirectosAbsorbidos = proporcion * totalIndirectos
       const costoAjustado = (f.total || 0) + indirectosAbsorbidos
       const precioVenta = costoAjustado * coef
-      return {
-        ...f,
-        indirectos_absorbidos: indirectosAbsorbidos,
-        costo_ajustado: costoAjustado,
-        precio_venta: precioVenta,
-      }
+      return { ...f, indirectos_absorbidos: indirectosAbsorbidos, costo_ajustado: costoAjustado, precio_venta: precioVenta }
     })
   }
 
@@ -175,18 +211,16 @@ function CostoPrevisto({ obra, perfil }) {
         await supabase.from('planilla_indirectos').insert(idsInd.map(id => ({ obra_id: obra.id, costo_previsto_id: id })))
       }
 
-      // Guardar planilla items
-      await supabase.from('planilla_items').delete().eq('obra_id', obra.id)
-      // Armar con rubros para mostrar agrupado
+      // Armar items con rubros
       const rubros = filas.filter(f => f.tipo === 'rubro')
       const itemsConRubro = []
       let orden = 0
+
       for (const rubro of rubros) {
+        const idxRubro = filas.findIndex(x => x.id === rubro.id)
+        const idxSigRubro = filas.findIndex((x, i) => i > idxRubro && x.tipo === 'rubro')
         const itemsDelRubro = planilla.filter(f => {
-          // Buscar items que pertenecen a este rubro
-          const idxRubro = filas.findIndex(x => x.id === rubro.id)
-          const idxItem  = filas.findIndex(x => x.id === f.id)
-          const idxSigRubro = filas.findIndex((x, i) => i > idxRubro && x.tipo === 'rubro')
+          const idxItem = filas.findIndex(x => x.id === f.id)
           return idxItem > idxRubro && (idxSigRubro === -1 || idxItem < idxSigRubro)
         })
         if (itemsDelRubro.length === 0) continue
@@ -213,19 +247,22 @@ function CostoPrevisto({ obra, perfil }) {
         }
       }
 
+      // Guardar planilla_items
+      await supabase.from('planilla_items').delete().eq('obra_id', obra.id)
       const { error: piErr } = await supabase.from('planilla_items').insert(itemsConRubro)
       if (piErr) throw new Error('Error guardando planilla: ' + piErr.message)
 
-      // Actualizar también planilla_medicion con estos ítems y precios de venta
+      // Actualizar planilla_medicion
       await supabase.from('planilla_avances').delete().eq('obra_id', obra.id)
       await supabase.from('planilla_medicion').delete().eq('obra_id', obra.id)
       const medicionItems = itemsConRubro.map((it, i) => ({
         obra_id: obra.id, orden: i,
-        tipo: it.tipo, codigo: it.descripcion?.substring(0,10) || it.codigo,
+        tipo: it.tipo,
+        codigo: it.codigo || it.descripcion?.substring(0,10) || '',
         descripcion: it.descripcion,
         unidad: it.unidad || null,
         cantidad: it.cantidad || null,
-        precio_unitario: it.tipo === 'item' ? (it.precio_venta && it.cantidad ? it.precio_venta / it.cantidad : null) : null,
+        precio_unitario: it.tipo === 'item' && it.cantidad ? it.precio_venta / it.cantidad : null,
         total: it.precio_venta,
         proyecto: meta?.proyecto || '',
         nombre_obra: meta?.nombre_obra || '',
@@ -244,9 +281,9 @@ function CostoPrevisto({ obra, perfil }) {
   }
 
   function descargarExcel() {
-    const wb = XLSX.utils.book_new()
     const coef = parseFloat(coeficiente)
     const dur  = parseInt(duracionMeses)
+    const wb = XLSX.utils.book_new()
 
     const titulo = [
       [`PLANILLA DE MEDICIÓN — ${meta?.nombre_obra || obra.nombre}`],
@@ -261,7 +298,7 @@ function CostoPrevisto({ obra, perfil }) {
       it.unidad || '',
       it.cantidad || '',
       it.tipo === 'item' && it.cantidad ? it.precio_venta / it.cantidad : '',
-      it.precio_venta,
+      it.precio_venta || 0,
     ])
 
     const ws = XLSX.utils.aoa_to_sheet([...titulo, ...filasDatos])
@@ -283,22 +320,22 @@ function CostoPrevisto({ obra, perfil }) {
 
   const fmt    = (n) => n != null ? Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
   const fmtPct = (n) => n != null ? (Number(n) * 100).toFixed(2) + '%' : '-'
-  const filaTotal = filas.find(f => f.descripcion && f.descripcion.includes('TOTAL COSTO'))
+  const filaTotal  = filas.find(f => f.descripcion && f.descripcion.includes('TOTAL COSTO'))
   const totalFinal = filaTotal?.total || null
-  const grupos = agrupar(filas)
+  const grupos     = agrupar(filas)
 
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
 
   return (
     <div>
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '0' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0' }}>
         <button onClick={() => setSeccion('ver')}
           style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'ver' ? '2px solid #2563eb' : '2px solid transparent', color: seccion === 'ver' ? '#2563eb' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
           Ver Costo Previsto
         </button>
         {esAdmin && filas.length > 0 && (
-          <button onClick={() => { setSeccion('wizard'); setPasoWizard(1); setPlanillaGenerada([]) }}
+          <button onClick={() => { setSeccion('wizard'); cargarConfigPlanilla() }}
             style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'wizard' ? '2px solid #2563eb' : '2px solid transparent', color: seccion === 'wizard' ? '#2563eb' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
             Generar Planilla de Medición
           </button>
@@ -308,7 +345,7 @@ function CostoPrevisto({ obra, perfil }) {
       {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
       {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
 
-      {/* ===== SECCIÓN VER ===== */}
+      {/* ===== VER ===== */}
       {seccion === 'ver' && (
         <>
           {meta && (
@@ -319,7 +356,6 @@ function CostoPrevisto({ obra, perfil }) {
               {totalFinal && <span style={{ marginLeft: 'auto', fontWeight: '700', fontSize: '15px', color: '#2563eb' }}>Total: ${Number(totalFinal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
             </div>
           )}
-
           {esAdmin && (
             <div style={{ marginBottom: '20px', padding: '16px 20px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '200px' }}>
@@ -332,7 +368,6 @@ function CostoPrevisto({ obra, perfil }) {
               </label>
             </div>
           )}
-
           {filas.length === 0 ? (
             <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
               {esAdmin ? 'Subí el Excel para ver el costo previsto.' : 'Aún no se cargó el costo previsto para esta obra.'}
@@ -389,198 +424,191 @@ function CostoPrevisto({ obra, perfil }) {
       {/* ===== WIZARD ===== */}
       {seccion === 'wizard' && (
         <div>
-          {/* Stepper */}
-          <div style={{ display: 'flex', gap: '0', marginBottom: '24px' }}>
-            {[
-              { n: 1, label: 'Gastos Indirectos' },
-              { n: 2, label: 'Coeficiente y Duración' },
-              { n: 3, label: 'Ver y Descargar' },
-            ].map((paso, i) => (
-              <div key={paso.n} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                  <div style={{
-                    width: '32px', height: '32px', borderRadius: '50%',
-                    background: pasoWizard >= paso.n ? '#2563eb' : '#e2e8f0',
-                    color: pasoWizard >= paso.n ? 'white' : '#aaa',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: '700', fontSize: '14px'
-                  }}>{paso.n}</div>
-                  <div style={{ fontSize: '11px', color: pasoWizard >= paso.n ? '#2563eb' : '#aaa', marginTop: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>{paso.label}</div>
-                </div>
-                {i < 2 && <div style={{ height: '2px', flex: 1, background: pasoWizard > paso.n ? '#2563eb' : '#e2e8f0', marginBottom: '20px' }} />}
+          {cargandoConfig ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando configuración...</div>
+          ) : (
+            <>
+              {/* Stepper */}
+              <div style={{ display: 'flex', gap: '0', marginBottom: '24px' }}>
+                {[{ n: 1, label: 'Gastos Indirectos' }, { n: 2, label: 'Coeficiente y Duración' }, { n: 3, label: 'Ver y Descargar' }].map((paso, i) => (
+                  <div key={paso.n} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: pasoWizard >= paso.n ? '#2563eb' : '#e2e8f0', color: pasoWizard >= paso.n ? 'white' : '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px' }}>{paso.n}</div>
+                      <div style={{ fontSize: '11px', color: pasoWizard >= paso.n ? '#2563eb' : '#aaa', marginTop: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>{paso.label}</div>
+                    </div>
+                    {i < 2 && <div style={{ height: '2px', flex: 1, background: pasoWizard > paso.n ? '#2563eb' : '#e2e8f0', marginBottom: '20px' }} />}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Paso 1 — Gastos Indirectos */}
-          {pasoWizard === 1 && (
-            <div>
-              <h4 style={{ color: '#1e3a5f', marginBottom: '8px' }}>Paso 1 — Marcá los ítems que son gastos indirectos</h4>
-              <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>Estos ítems no aparecerán en la planilla de medición. Su costo se redistribuirá proporcionalmente entre los demás ítems.</p>
-              <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ background: '#1e3a5f', color: 'white' }}>
-                      <th style={{ padding: '8px 12px', width: '40px' }}>Indirecto</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left' }}>Código</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left' }}>Descripción</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {grupos.map((g, gi) => (
-                      <React.Fragment key={gi}>
-                        {g.rubro && (
-                          <tr style={{ background: '#dbeafe' }}>
-                            <td />
-                            <td colSpan={3} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
-                          </tr>
-                        )}
-                        {g.items.filter(f => f.tipo === 'item' && f.total).map((f, fi) => (
-                          <tr key={fi} style={{ background: indirectos[f.id] ? '#fef9c3' : fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '7px 12px', textAlign: 'center' }}>
-                              <input type="checkbox" checked={!!indirectos[f.id]} onChange={() => toggleIndirecto(f.id)}
-                                style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                            </td>
-                            <td style={{ padding: '7px 12px', color: '#666' }}>{f.codigo}</td>
-                            <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
-                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600' }}>${fmt(f.total)}</td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '13px', color: '#666' }}>
-                  {Object.values(indirectos).filter(Boolean).length} ítems marcados como indirectos
-                </div>
-                <button onClick={() => setPasoWizard(2)}
-                  style={{ padding: '8px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                  Siguiente →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Paso 2 — Coeficiente y Duración */}
-          {pasoWizard === 2 && (
-            <div>
-              <h4 style={{ color: '#1e3a5f', marginBottom: '8px' }}>Paso 2 — Coeficiente de pase y duración</h4>
-              <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
-                El coeficiente multiplica el costo ajustado (con indirectos redistribuidos) para obtener el precio de venta.
-              </p>
-              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
+              {/* Paso 1 */}
+              {pasoWizard === 1 && (
                 <div>
-                  <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Coeficiente de pase</label>
-                  <input type="number" min="1" step="0.01" value={coeficiente}
-                    onChange={ev => setCoeficiente(ev.target.value)}
-                    placeholder="ej: 1.35"
-                    style={{ width: '150px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Duración de la obra (meses)</label>
-                  <input type="number" min="1" max="60" value={duracionMeses}
-                    onChange={ev => setDuracionMeses(ev.target.value)}
-                    placeholder="ej: 12"
-                    style={{ width: '150px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px' }} />
-                </div>
-              </div>
-
-              {/* Preview */}
-              {coeficiente && parseFloat(coeficiente) > 0 && (
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e3a5f', marginBottom: '8px' }}>Preview de precios de venta</div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <h4 style={{ color: '#1e3a5f', marginBottom: '8px' }}>Paso 1 — Marcá los ítems que son gastos indirectos</h4>
+                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>Estos ítems no aparecerán en la planilla de medición. Su costo se redistribuirá proporcionalmente entre los demás ítems.</p>
+                  <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
                         <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                          <th style={{ padding: '8px 12px', width: '40px' }}>Indirecto</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left' }}>Código</th>
                           <th style={{ padding: '8px 12px', textAlign: 'left' }}>Descripción</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Costo Original</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Indirectos</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Costo Ajustado</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'right', background: '#1a5c3a' }}>Precio Venta</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {calcularPlanilla().map((f, i) => (
-                          <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '6px 12px' }}>{f.descripcion}</td>
-                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.total)}</td>
-                            <td style={{ padding: '6px 12px', textAlign: 'right', color: '#ca8a04' }}>${fmt(f.indirectos_absorbidos)}</td>
-                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.costo_ajustado)}</td>
-                            <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#16a34a' }}>${fmt(f.precio_venta)}</td>
-                          </tr>
+                        {grupos.map((g, gi) => (
+                          <React.Fragment key={gi}>
+                            {g.rubro && (
+                              <tr style={{ background: '#dbeafe' }}>
+                                <td />
+                                <td colSpan={3} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
+                              </tr>
+                            )}
+                            {g.items.filter(f => f.tipo === 'item' && f.total).map((f, fi) => (
+                              <tr key={fi} style={{ background: indirectos[f.id] ? '#fef9c3' : fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '7px 12px', textAlign: 'center' }}>
+                                  <input type="checkbox" checked={!!indirectos[f.id]} onChange={() => toggleIndirecto(f.id)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                                </td>
+                                <td style={{ padding: '7px 12px', color: '#666' }}>{f.codigo}</td>
+                                <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
+                                <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600' }}>${fmt(f.total)}</td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         ))}
-                        <tr style={{ background: '#1e3a5f' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: '700', color: 'white' }}>TOTAL</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.total,0))}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#fde68a', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.indirectos_absorbidos,0))}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.costo_ajustado,0))}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: '#86efac', fontWeight: '700', fontSize: '14px' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.precio_venta,0))}</td>
-                        </tr>
                       </tbody>
                     </table>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '13px', color: '#666' }}>{Object.values(indirectos).filter(Boolean).length} ítems marcados como indirectos</div>
+                    <button onClick={() => setPasoWizard(2)} style={{ padding: '8px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+                      Siguiente →
+                    </button>
                   </div>
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between' }}>
-                <button onClick={() => setPasoWizard(1)}
-                  style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#555' }}>
-                  ← Anterior
-                </button>
-                <button onClick={guardarYGenerarPlanilla} disabled={guardandoPlanilla || !coeficiente || !duracionMeses}
-                  style={{ padding: '8px 24px', background: !coeficiente || !duracionMeses ? '#94a3b8' : '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: !coeficiente || !duracionMeses ? 'not-allowed' : 'pointer' }}>
-                  {guardandoPlanilla ? 'Generando...' : 'Generar Planilla →'}
-                </button>
-              </div>
-            </div>
-          )}
+              {/* Paso 2 */}
+              {pasoWizard === 2 && (
+                <div>
+                  <h4 style={{ color: '#1e3a5f', marginBottom: '8px' }}>Paso 2 — Coeficiente de pase y duración</h4>
+                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>El coeficiente multiplica el costo ajustado para obtener el precio de venta.</p>
+                  <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
+                    <div>
+                      <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Coeficiente de pase</label>
+                      <input type="number" min="1" step="0.01" value={coeficiente} onChange={ev => setCoeficiente(ev.target.value)} placeholder="ej: 1.35"
+                        style={{ width: '150px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Duración de la obra (meses)</label>
+                      <input type="number" min="1" max="60" value={duracionMeses} onChange={ev => setDuracionMeses(ev.target.value)} placeholder="ej: 12"
+                        style={{ width: '150px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px' }} />
+                    </div>
+                  </div>
 
-          {/* Paso 3 — Ver y Descargar */}
-          {pasoWizard === 3 && planillaGenerada.length > 0 && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h4 style={{ color: '#1e3a5f', margin: 0 }}>Paso 3 — Planilla de Medición generada</h4>
-                <button onClick={descargarExcel}
-                  style={{ padding: '8px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                  ⬇ Descargar Excel
-                </button>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ background: '#1e3a5f', color: 'white' }}>
-                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Cantidad</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>P. Unit. Venta</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Total Venta</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {planillaGenerada.map((f, i) => (
-                      <tr key={i} style={{ background: f.tipo === 'rubro' ? '#dbeafe' : i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '7px 12px', fontWeight: f.tipo === 'rubro' ? '700' : '400', color: f.tipo === 'rubro' ? '#1e3a5f' : 'inherit' }}>{f.descripcion}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{f.tipo === 'rubro' ? '' : f.unidad || ''}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right' }}>{f.tipo === 'rubro' ? '' : fmt(f.cantidad)}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right' }}>{f.tipo === 'rubro' ? '' : (f.cantidad ? fmt(f.precio_venta / f.cantidad) : '-')}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: f.tipo === 'rubro' ? '#1e3a5f' : '#111' }}>${fmt(f.precio_venta)}</td>
-                      </tr>
-                    ))}
-                    <tr style={{ background: '#1e3a5f' }}>
-                      <td colSpan={4} style={{ padding: '12px', fontWeight: '700', color: 'white', fontSize: '14px' }}>TOTAL PRECIO DE VENTA</td>
-                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'white', fontSize: '15px' }}>${fmt(planillaGenerada.reduce((s,f) => s + (f.precio_venta||0), 0))}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ marginTop: '16px', padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '13px', color: '#16a34a' }}>
-                ✓ La planilla fue guardada y ya está disponible en el módulo <b>Planilla de Medición</b> para que el jefe de obra cargue los avances.
-              </div>
-            </div>
+                  {coeficiente && parseFloat(coeficiente) > 0 && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e3a5f', marginBottom: '8px' }}>Preview de precios de venta</div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                          <thead>
+                            <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                              <th style={{ padding: '8px 12px', textAlign: 'left' }}>Descripción</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>Costo Original</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>Indirectos</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right' }}>Costo Ajustado</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right', background: '#1a5c3a' }}>Precio Venta</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {calcularPlanilla().map((f, i) => (
+                              <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '6px 12px' }}>{f.descripcion}</td>
+                                <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.total)}</td>
+                                <td style={{ padding: '6px 12px', textAlign: 'right', color: '#ca8a04' }}>${fmt(f.indirectos_absorbidos)}</td>
+                                <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.costo_ajustado)}</td>
+                                <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#16a34a' }}>${fmt(f.precio_venta)}</td>
+                              </tr>
+                            ))}
+                            <tr style={{ background: '#1e3a5f' }}>
+                              <td style={{ padding: '8px 12px', fontWeight: '700', color: 'white' }}>TOTAL</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.total,0))}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', color: '#fde68a', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.indirectos_absorbidos,0))}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.costo_ajustado,0))}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', color: '#86efac', fontWeight: '700', fontSize: '14px' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.precio_venta,0))}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between' }}>
+                    <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#555' }}>← Anterior</button>
+                    <button onClick={guardarYGenerarPlanilla} disabled={guardandoPlanilla || !coeficiente || !duracionMeses}
+                      style={{ padding: '8px 24px', background: !coeficiente || !duracionMeses ? '#94a3b8' : '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: !coeficiente || !duracionMeses ? 'not-allowed' : 'pointer' }}>
+                      {guardandoPlanilla ? 'Generando...' : 'Generar Planilla →'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 3 */}
+              {pasoWizard === 3 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h4 style={{ color: '#1e3a5f', margin: 0 }}>Planilla de Medición generada</h4>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', color: '#555' }}>
+                        ✏️ Modificar
+                      </button>
+                      <button onClick={descargarExcel} disabled={planillaGenerada.length === 0}
+                        style={{ padding: '8px 20px', background: planillaGenerada.length > 0 ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: planillaGenerada.length > 0 ? 'pointer' : 'not-allowed' }}>
+                        ⬇ Descargar Excel
+                      </button>
+                    </div>
+                  </div>
+
+                  {planillaGenerada.length === 0 ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: '#aaa' }}>No hay datos generados todavía.</div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                            <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Cantidad</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>P. Unit. Venta</th>
+                            <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Total Venta</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {planillaGenerada.map((f, i) => (
+                            <tr key={i} style={{ background: f.tipo === 'rubro' ? '#dbeafe' : i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '7px 12px', fontWeight: f.tipo === 'rubro' ? '700' : '400', color: f.tipo === 'rubro' ? '#1e3a5f' : 'inherit' }}>{f.descripcion}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{f.tipo === 'rubro' ? '' : f.unidad || ''}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right' }}>{f.tipo === 'rubro' ? '' : fmt(f.cantidad)}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right' }}>{f.tipo === 'rubro' ? '' : (f.cantidad ? fmt(f.precio_venta / f.cantidad) : '-')}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: f.tipo === 'rubro' ? '#1e3a5f' : '#111' }}>${fmt(f.precio_venta)}</td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: '#1e3a5f' }}>
+                            <td colSpan={4} style={{ padding: '12px', fontWeight: '700', color: 'white', fontSize: '14px' }}>TOTAL PRECIO DE VENTA</td>
+                            <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'white', fontSize: '15px' }}>${fmt(planillaGenerada.reduce((s,f) => s + (f.precio_venta||0), 0))}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: '16px', padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '13px', color: '#16a34a' }}>
+                    ✓ La planilla está disponible en el módulo <b>Planilla de Medición</b> para cargar avances.
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

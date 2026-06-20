@@ -642,7 +642,18 @@ function CostoPrevisto({ obra, perfil }) {
                               <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : f.unidad || ''}</td>
                               <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : fmt(f.cantidad)}</td>
                               <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : (f.cantidad ? fmt(f.precio_venta / f.cantidad) : '-')}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '#1e3a5f' : '#111' }}>{f.tipo === 'titulo' ? '' : '$' + fmt(f.precio_venta)}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '#1e3a5f' : '#111' }}>
+                                {f.tipo === 'titulo'
+                                  ? (() => {
+                                      const idxT = planillaGenerada.indexOf(f)
+                                      const idxN = planillaGenerada.findIndex((x, ii) => ii > idxT && (x.tipo === 'titulo' || x.tipo === 'rubro'))
+                                      const sub = planillaGenerada.slice(idxT + 1, idxN === -1 ? undefined : idxN)
+                                      const total = sub.reduce((s, x) => s + (x.precio_venta || 0), 0)
+                                      return total > 0 ? '$' + fmt(total) : ''
+                                    })()
+                                  : f.tipo === 'rubro' ? '' : '$' + fmt(f.precio_venta)
+                                }
+                              </td>
                             </tr>
                           ))}
                           <tr style={{ background: '#1e3a5f' }}>

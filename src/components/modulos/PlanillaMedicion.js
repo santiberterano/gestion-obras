@@ -17,7 +17,6 @@ function PlanillaMedicion({ obra, perfil }) {
   const [porcentajes, setPorcentajes] = useState({})
 
   const esJefe  = perfil?.area === 'jefe_obra'
-  const esAdmin = perfil?.area === 'administracion'
 
   useEffect(() => {
     cargarDatos()

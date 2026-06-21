@@ -657,7 +657,15 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                                       const total = sub.reduce((s, x) => s + (x.precio_venta || 0), 0)
                                       return total > 0 ? '$' + fmt(total) : ''
                                     })()
-                                  : f.tipo === 'rubro' ? '$' + fmt(f.precio_venta) : ...
+                                  : f.tipo === 'rubro'
+                                    ? (() => {
+                                        const idxR = planillaGenerada.indexOf(f)
+                                        const idxN = planillaGenerada.findIndex((x, ii) => ii > idxR && x.tipo === 'rubro')
+                                        const sub = planillaGenerada.slice(idxR + 1, idxN === -1 ? undefined : idxN)
+                                        const total = sub.filter(x => x.tipo === 'item').reduce((s, x) => s + (x.precio_venta || 0), 0)
+                                        return total > 0 ? '$' + fmt(total) : ''
+                                      })()
+                                    : '$' + fmt(f.precio_venta)
                                 }
                               </td>
                             </tr>

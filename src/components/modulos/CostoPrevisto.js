@@ -662,12 +662,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                                         const idxR = planillaGenerada.indexOf(f)
                                         const idxN = planillaGenerada.findIndex((x, ii) => ii > idxR && x.tipo === 'rubro')
                                         const sub = planillaGenerada.slice(idxR + 1, idxN === -1 ? planillaGenerada.length : idxN)
-                                        // Solo items directos del rubro (antes del primer titulo o rubro)
-                                        const idxPrimerTitulo = sub.findIndex(x => x.tipo === 'titulo')
-                                        const itemsDirectos = idxPrimerTitulo === -1 ? sub : sub.slice(0, idxPrimerTitulo)
-                                        // Más los items dentro de cada titulo del rubro
-                                        const itemsEnTitulos = sub.filter(x => x.tipo === 'item')
-                                        const total = itemsEnTitulos.reduce((s, x) => s + (x.precio_venta || 0), 0)
+                                        const total = sub.filter(x => x.tipo === 'item').reduce((s, x) => s + (x.precio_venta || 0), 0)
                                         return total > 0 ? '$' + fmt(total) : ''
                                       })()
                                     : '$' + fmt(f.precio_venta)

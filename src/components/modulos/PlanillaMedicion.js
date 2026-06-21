@@ -355,7 +355,7 @@ function PlanillaMedicion({ obra, perfil }) {
 
       {/* ── Barra sticky de controles ── */}
       <div style={{
-        position: 'sticky', top: 0, zIndex: 50,
+        position: 'sticky', top: 0, zIndex: 50, background: '#f8f7f4',
         background: '#f8f7f4',
         borderBottom: `2px solid ${C.amarillo}`,
         padding: '8px 12px',

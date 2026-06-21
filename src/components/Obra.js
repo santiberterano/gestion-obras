@@ -48,7 +48,7 @@ function Obra({ obra, perfil, onVolver }) {
         <div style={{ width: '1px', height: '20px', background: '#2a2a2a', flexShrink: 0 }} />
         <span style={{ fontWeight: '500', color: 'white', whiteSpace: 'nowrap', fontSize: '14px', flexShrink: 0 }}>{obra.nombre}</span>
         <div style={{ width: '1px', height: '20px', background: '#2a2a2a', flexShrink: 0 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px', overflow: 'hidden', justifyContent: 'center' }}>
           {obra.codigo && <span style={{ color: '#666', whiteSpace: 'nowrap' }}>Cód: <span style={{ color: '#999' }}>{obra.codigo}</span></span>}
           {obra.version !== null && <span style={{ color: '#666', whiteSpace: 'nowrap' }}>V: <span style={{ color: '#999' }}>{obra.version}</span></span>}
           {obra.mes_base && obra.anio_base && <span style={{ color: '#666', whiteSpace: 'nowrap' }}>Base: <span style={{ color: '#999' }}>{obra.mes_base} {obra.anio_base}</span></span>}
@@ -108,7 +108,7 @@ function Obra({ obra, perfil, onVolver }) {
       </div>
 
       {/* CONTENIDO */}
-      <div style={{ paddingTop: '116px', padding: '116px 24px 40px', maxWidth: '1100px', margin: '0 auto' }}>
+      <div style={{ paddingTop: '100px', padding: '100px 24px 40px', maxWidth: '1100px', margin: '0 auto' }}>
         {!seccion ? (
           <div style={{ textAlign: 'center', padding: '80px 0', color: '#444', fontSize: '14px' }}>
             Seleccioná un módulo para comenzar.

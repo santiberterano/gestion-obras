@@ -297,7 +297,6 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
   }
 
   function descargarExcel() {
-    const coef = parseFloat(coeficiente)
     const dur  = parseInt(duracionMeses)
     const wb = XLSX.utils.book_new()
 

@@ -15,7 +15,7 @@ function PlanillaMedicion({ obra, perfil }) {
   const [mostrarMonto, setMostrarMonto] = useState(false)
   const [mostrarPrecios, setMostrarPrecios] = useState(false)
   const [porcentajes, setPorcentajes] = useState({})
-  const [expandidos, setExpandidos] = useState({}) // { 'rubro-gi': true, 'titulo-gi-sgi': true }
+  const [expandidos, setExpandidos] = useState({})
 
   const esJefe = perfil?.area === 'jefe_obra'
 
@@ -41,7 +41,6 @@ function PlanillaMedicion({ obra, perfil }) {
 
   const meses = duracionMeses ? Array.from({ length: duracionMeses }, (_, i) => i + 1) : []
   const mesesVisibles = mesSeleccionado ? [mesSeleccionado] : meses
-
   const tieneProyInicial = avances.some(a => a.tipo === 'proyeccion_inicial')
   const mesesConReal = [...new Set(avances.filter(a => a.tipo === 'real').map(a => a.mes))].sort((a,b) => a-b)
   const proximoMesReal = mesesConReal.length > 0 ? Math.max(...mesesConReal) + 1 : 1
@@ -50,16 +49,35 @@ function PlanillaMedicion({ obra, perfil }) {
     return avances.find(a => a.planilla_item_id === itemId && a.mes === mes && a.tipo === tipo)
   }
 
+  // Estructura plana: lista de secciones, cada una con titulo y sus items
+  // Los rubros se muestran como separadores visuales, los titulos como secciones desplegables
+  const secciones = []
+  let seccionActual = null
+  for (const it of items) {
+    if (it.tipo === 'rubro') {
+      // El rubro es solo un separador visual, no una sección desplegable
+      secciones.push({ esRubro: true, item: it })
+      seccionActual = null
+    } else if (it.tipo === 'titulo') {
+      seccionActual = { esRubro: false, esTitulo: true, item: it, items: [] }
+      secciones.push(seccionActual)
+    } else if (it.tipo === 'item') {
+      if (seccionActual) {
+        seccionActual.items.push(it)
+      } else {
+        // Items sin título van en una sección implícita
+        secciones.push({ esItemSuelto: true, item: it })
+      }
+    }
+  }
+
   function toggleExpandido(key) {
     setExpandidos(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   function expandirTodo() {
     const keys = {}
-    grupos.forEach((g, gi) => {
-      keys[`rubro-${gi}`] = true
-      g.subgrupos.forEach((sg, sgi) => { keys[`titulo-${gi}-${sgi}`] = true })
-    })
+    secciones.forEach((s, i) => { if (s.esTitulo) keys[`s-${i}`] = true })
     setExpandidos(keys)
   }
 
@@ -147,27 +165,26 @@ function PlanillaMedicion({ obra, perfil }) {
   const fmtPct = (n) => n != null ? (Number(n) * 100).toFixed(1) + '%' : '-'
   const totalVenta = items.filter(it => it.tipo === 'item').reduce((s, it) => s + (it.precio_venta || 0), 0)
 
-  const grupos = []
-  let grupoActual = null
-  for (const it of items) {
-    if (it.tipo === 'rubro') { grupoActual = { rubro: it, subgrupos: [], itemsDirectos: [] }; grupos.push(grupoActual) }
-    else if (it.tipo === 'titulo' && grupoActual) { grupoActual.subgrupos.push({ titulo: it, items: [] }) }
-    else if (it.tipo === 'item' && grupoActual) {
-      if (grupoActual.subgrupos.length > 0) grupoActual.subgrupos[grupoActual.subgrupos.length - 1].items.push(it)
-      else grupoActual.itemsDirectos.push(it)
-    }
-  }
-
   const tiposVisibles = [
     { tipo: 'proyeccion_inicial', label: 'P.Ini', color: '#2d4a6e', bgHeader: '#2d4a6e' },
     { tipo: 'real', label: 'Real', color: '#16a34a', bgHeader: '#1a5c3a' },
     { tipo: 'proyeccion_corregida', label: 'P.Cor', color: '#ca8a04', bgHeader: '#7c5a00' },
   ]
 
+  function calcPctPonderado(itemsList, m, tipo) {
+    const suma = itemsList.reduce((s, it) => { const av = getAvance(it.id, m, tipo); return s + (av?.porcentaje || 0) * (it.precio_venta || 0) }, 0)
+    const total = itemsList.reduce((s, it) => s + (it.precio_venta || 0), 0)
+    return total > 0 ? suma / total : null
+  }
+
+  function calcMonto(itemsList, m, tipo) {
+    return itemsList.reduce((s, it) => { const av = getAvance(it.id, m, tipo); return s + (av?.monto || 0) }, 0)
+  }
+
   function renderItemRow(it, fi) {
     return (
       <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-        <td style={{ padding: '5px 12px', fontSize: '12px', paddingLeft: '24px' }}>{it.descripcion}</td>
+        <td style={{ padding: '5px 12px 5px 32px', fontSize: '12px' }}>{it.descripcion}</td>
         {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', color: '#888', fontSize: '11px' }}>{it.unidad}</td>}
         {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', fontSize: '11px' }}>{it.cantidad != null ? Number(it.cantidad).toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '-'}</td>}
         {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: '600', fontSize: '11px' }}>{fmt(it.precio_venta)}</td>}
@@ -196,10 +213,38 @@ function PlanillaMedicion({ obra, perfil }) {
 
   return (
     <div>
-      {/* Encabezado */}
-      <div style={{ marginBottom: '12px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', fontSize: '13px', color: '#555' }}>
-        {duracionMeses && <span><b style={{ color: '#999' }}>Duración:</b> {duracionMeses} meses</span>}
-        {totalVenta > 0 && <span style={{ fontWeight: '700', fontSize: '14px', color: '#2563eb' }}>Total: {fmt(totalVenta)}</span>}
+      {/* Barra sticky de controles — ARRIBA DE TODO */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'white', borderBottom: '2px solid #e2e8f0', padding: '8px 0 8px', marginBottom: '16px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap' }}>Mes:</span>
+        <button onClick={() => setMesSeleccionado(null)}
+          style={{ padding: '3px 10px', background: !mesSeleccionado ? '#2563eb' : 'white', color: !mesSeleccionado ? 'white' : '#555', border: '1px solid ' + (!mesSeleccionado ? '#2563eb' : '#e2e8f0'), borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
+          Todos
+        </button>
+        {meses.map(m => (
+          <button key={m} onClick={() => setMesSeleccionado(m)}
+            style={{ padding: '3px 10px', background: mesSeleccionado === m ? '#2563eb' : 'white', color: mesSeleccionado === m ? 'white' : '#555', border: '1px solid ' + (mesSeleccionado === m ? '#2563eb' : '#e2e8f0'), borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
+            M{String(m).padStart(2,'0')}
+          </button>
+        ))}
+        <div style={{ width: '1px', height: '18px', background: '#e2e8f0' }} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={mostrarPrecios} onChange={e => setMostrarPrecios(e.target.checked)} /> Precios
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={mostrarMonto} onChange={e => setMostrarMonto(e.target.checked)} /> Montos $
+        </label>
+        <div style={{ width: '1px', height: '18px', background: '#e2e8f0' }} />
+        <button onClick={expandirTodo} style={{ padding: '3px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: '#555', whiteSpace: 'nowrap' }}>+ Expandir todo</button>
+        <button onClick={colapsarTodo} style={{ padding: '3px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: '#555', whiteSpace: 'nowrap' }}>- Colapsar todo</button>
+        <div style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: '700', color: '#2563eb', whiteSpace: 'nowrap' }}>{fmt(totalVenta)}</div>
+      </div>
+
+      {/* Info */}
+      <div style={{ marginBottom: '12px', display: 'flex', gap: '16px', fontSize: '11px' }}>
+        {duracionMeses && <span style={{ color: '#888' }}>Duración: {duracionMeses} meses</span>}
+        <span style={{ color: '#2d4a6e', fontWeight: '600' }}>■ Proy. Inicial</span>
+        <span style={{ color: '#16a34a', fontWeight: '600' }}>■ Real</span>
+        <span style={{ color: '#ca8a04', fontWeight: '600' }}>■ Proy. Corregida</span>
       </div>
 
       {/* Botones jefe de obra */}
@@ -227,7 +272,7 @@ function PlanillaMedicion({ obra, perfil }) {
             </button>
             <button onClick={() => abrirCarga('real')} disabled={proximoMesReal > (duracionMeses || 0)}
               style={{ padding: '12px 20px', background: 'white', color: '#16a34a', border: '1px solid #16a34a', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
-              ✅ Medición Real — Mes {String(proximoMesReal).padStart(2,'0')}
+              ✅ Medición Real — Mes {String(proximoMesReal).padStart(2,'00')}
             </button>
             <button onClick={() => abrirCarga('proyeccion_corregida')} disabled={!tieneProyInicial}
               style={{ padding: '12px 20px', background: tieneProyInicial ? 'white' : '#f3f4f6', color: tieneProyInicial ? '#ca8a04' : '#aaa', border: '1px solid ' + (tieneProyInicial ? '#ca8a04' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: tieneProyInicial ? 'pointer' : 'not-allowed' }}>
@@ -251,7 +296,6 @@ function PlanillaMedicion({ obra, perfil }) {
             </h4>
             <button onClick={() => setTipoCarga(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '18px' }}>✕</button>
           </div>
-
           <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
@@ -268,43 +312,65 @@ function PlanillaMedicion({ obra, perfil }) {
                 </tr>
               </thead>
               <tbody>
-                {grupos.map((g, gi) => (
-                  <React.Fragment key={gi}>
-                    <tr style={{ background: '#dbeafe' }}>
-                      <td colSpan={99} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px' }}>{g.rubro.descripcion}</td>
+                {secciones.map((s, si) => {
+                  if (s.esRubro) return (
+                    <tr key={`r-${si}`} style={{ background: '#dbeafe' }}>
+                      <td colSpan={99} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px' }}>{s.item.descripcion}</td>
                     </tr>
-                    {[...g.itemsDirectos, ...g.subgrupos.flatMap(sg => [{ ...sg.titulo, _esTitulo: true }, ...sg.items])].map((it, fi) => {
-                      if (it._esTitulo) return (
-                        <tr key={`t-${it.id}`} style={{ background: '#f8fafc' }}>
-                          <td colSpan={99} style={{ padding: '6px 20px', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>{it.descripcion}</td>
-                        </tr>
-                      )
-                      const mesesEdit = tipoCarga === 'real' ? [proximoMesReal] : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m))
-                      // Monto acumulado: usa el % del último mes con valor
-                      const ultimoPct = [...mesesEdit].reverse().map(m => parseFloat(String(porcentajes[`${it.id}-${m}`] || '').replace(',','.'))).find(v => !isNaN(v) && v > 0) || 0
-                      const monto = it.precio_venta && ultimoPct > 0 ? (ultimoPct / 100) * it.precio_venta : null
-                      return (
-                        <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '6px 12px' }}>{it.descripcion}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.precio_venta)}</td>
-                          {mesesEdit.map(m => (
-                            <td key={m} style={{ padding: '4px 4px', textAlign: 'right' }}>
-                              <input type="number" min="0" max="100" step="0.1"
-                                value={porcentajes[`${it.id}-${m}`] || ''}
-                                onChange={ev => setPorcentajes(prev => ({ ...prev, [`${it.id}-${m}`]: ev.target.value }))}
-                                style={{ width: '58px', padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', textAlign: 'right' }} />
-                            </td>
-                          ))}
-                          <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? '#2563eb' : '#aaa', fontSize: '12px' }}>{monto ? fmt(monto) : '-'}</td>
-                        </tr>
-                      )
-                    })}
-                  </React.Fragment>
-                ))}
+                  )
+                  if (s.esItemSuelto) {
+                    const it = s.item
+                    const mesesEdit = tipoCarga === 'real' ? [proximoMesReal] : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m))
+                    const ultimoPct = [...mesesEdit].reverse().map(m => parseFloat(String(porcentajes[`${it.id}-${m}`] || '').replace(',','.'))).find(v => !isNaN(v) && v > 0) || 0
+                    const monto = it.precio_venta && ultimoPct > 0 ? (ultimoPct / 100) * it.precio_venta : null
+                    return (
+                      <tr key={`is-${si}`} style={{ background: 'white', borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '6px 12px' }}>{it.descripcion}</td>
+                        <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.precio_venta)}</td>
+                        {mesesEdit.map(m => (
+                          <td key={m} style={{ padding: '4px 4px', textAlign: 'right' }}>
+                            <input type="number" min="0" max="100" step="0.1"
+                              value={porcentajes[`${it.id}-${m}`] || ''}
+                              onChange={ev => setPorcentajes(prev => ({ ...prev, [`${it.id}-${m}`]: ev.target.value }))}
+                              style={{ width: '58px', padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', textAlign: 'right' }} />
+                          </td>
+                        ))}
+                        <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? '#2563eb' : '#aaa', fontSize: '12px' }}>{monto ? fmt(monto) : '-'}</td>
+                      </tr>
+                    )
+                  }
+                  // Es título con items
+                  return (
+                    <React.Fragment key={`t-${si}`}>
+                      <tr style={{ background: '#f0f4f8' }}>
+                        <td colSpan={99} style={{ padding: '6px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>{s.item.descripcion}</td>
+                      </tr>
+                      {s.items.map((it, fi) => {
+                        const mesesEdit = tipoCarga === 'real' ? [proximoMesReal] : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m))
+                        const ultimoPct = [...mesesEdit].reverse().map(m => parseFloat(String(porcentajes[`${it.id}-${m}`] || '').replace(',','.'))).find(v => !isNaN(v) && v > 0) || 0
+                        const monto = it.precio_venta && ultimoPct > 0 ? (ultimoPct / 100) * it.precio_venta : null
+                        return (
+                          <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '6px 12px 6px 24px' }}>{it.descripcion}</td>
+                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.precio_venta)}</td>
+                            {mesesEdit.map(m => (
+                              <td key={m} style={{ padding: '4px 4px', textAlign: 'right' }}>
+                                <input type="number" min="0" max="100" step="0.1"
+                                  value={porcentajes[`${it.id}-${m}`] || ''}
+                                  onChange={ev => setPorcentajes(prev => ({ ...prev, [`${it.id}-${m}`]: ev.target.value }))}
+                                  style={{ width: '58px', padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', textAlign: 'right' }} />
+                              </td>
+                            ))}
+                            <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? '#2563eb' : '#aaa', fontSize: '12px' }}>{monto ? fmt(monto) : '-'}</td>
+                          </tr>
+                        )
+                      })}
+                    </React.Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
-
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button onClick={() => setTipoCarga(null)} style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#555' }}>Cancelar</button>
             <button onClick={guardar} disabled={guardando}
@@ -317,137 +383,80 @@ function PlanillaMedicion({ obra, perfil }) {
 
       {/* Tabla de visualización */}
       {(!esJefe || vistaJefe === 'ver' || !vistaJefe) && !tipoCarga && (
-        <>
-          {/* Barra sticky de controles */}
-          <div style={{ position: 'sticky', top: '56px', zIndex: 50, background: 'white', borderBottom: '1px solid #e2e8f0', padding: '8px 0', marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {/* Filtro mes */}
-            <span style={{ fontSize: '11px', color: '#888' }}>Mes:</span>
-            <button onClick={() => setMesSeleccionado(null)}
-              style={{ padding: '3px 10px', background: !mesSeleccionado ? '#2563eb' : 'white', color: !mesSeleccionado ? 'white' : '#555', border: '1px solid ' + (!mesSeleccionado ? '#2563eb' : '#e2e8f0'), borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
-              Todos
-            </button>
-            {meses.map(m => (
-              <button key={m} onClick={() => setMesSeleccionado(m)}
-                style={{ padding: '3px 10px', background: mesSeleccionado === m ? '#2563eb' : 'white', color: mesSeleccionado === m ? 'white' : '#555', border: '1px solid ' + (mesSeleccionado === m ? '#2563eb' : '#e2e8f0'), borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
-                M{String(m).padStart(2,'0')}
-              </button>
-            ))}
-            <div style={{ width: '1px', height: '20px', background: '#e2e8f0', margin: '0 4px' }} />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={mostrarPrecios} onChange={e => setMostrarPrecios(e.target.checked)} />
-              Precios
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={mostrarMonto} onChange={e => setMostrarMonto(e.target.checked)} />
-              Montos $
-            </label>
-            <div style={{ width: '1px', height: '20px', background: '#e2e8f0', margin: '0 4px' }} />
-            <button onClick={expandirTodo} style={{ padding: '3px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: '#555' }}>+ Expandir todo</button>
-            <button onClick={colapsarTodo} style={{ padding: '3px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: '#555' }}>- Colapsar todo</button>
-          </div>
-
-          {/* Leyenda */}
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '11px' }}>
-            <span style={{ color: '#2d4a6e', fontWeight: '600' }}>■ Proy. Inicial</span>
-            <span style={{ color: '#16a34a', fontWeight: '600' }}>■ Real</span>
-            <span style={{ color: '#ca8a04', fontWeight: '600' }}>■ Proy. Corregida</span>
-          </div>
-
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', minWidth: '500px' }}>
-              <thead>
-                <tr style={{ background: '#1e3a5f', color: 'white' }}>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', minWidth: '200px' }}>Descripción</th>
-                  {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: '10px' }}>Unid.</th>}
-                  {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: '10px' }}>Cant.</th>}
-                  {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: '10px' }}>P.V.</th>}
-                  {mesesVisibles.map(m => (
-                    tiposVisibles.map(tv => (
-                      <React.Fragment key={`${m}-${tv.tipo}`}>
-                        <th style={{ padding: '8px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader }}>
-                          M{String(m).padStart(2,'0')} {tv.label}
-                        </th>
-                        {mostrarMonto && <th style={{ padding: '8px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader, opacity: 0.8 }}>$ M{String(m).padStart(2,'0')}</th>}
-                      </React.Fragment>
-                    ))
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {grupos.map((g, gi) => {
-                  const rubroKey = `rubro-${gi}`
-                  const rubroExpandido = !!expandidos[rubroKey]
-                  const allItemsRubro = [...g.itemsDirectos, ...g.subgrupos.flatMap(sg => sg.items)]
-                  return (
-                    <React.Fragment key={gi}>
-                      {/* Rubro — clickeable */}
-                      <tr style={{ background: '#dbeafe', cursor: 'pointer' }} onClick={() => toggleExpandido(rubroKey)}>
-                        <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px' }}>
-                          <span style={{ marginRight: '8px' }}>{rubroExpandido ? '▼' : '▶'}</span>
-                          {g.rubro.descripcion}
-                        </td>
-                        {mostrarPrecios && <td colSpan={2} />}
-                        {mostrarPrecios && <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>
-                          {fmt(allItemsRubro.reduce((s, it) => s + (it.precio_venta || 0), 0))}
-                        </td>}
-                        {mesesVisibles.map(m => tiposVisibles.map(tv => {
-                          const suma = allItemsRubro.reduce((s, it) => { const av = getAvance(it.id, m, tv.tipo); return s + (av?.porcentaje || 0) * (it.precio_venta || 0) }, 0)
-                          const total = allItemsRubro.reduce((s, it) => s + (it.precio_venta || 0), 0)
-                          const montoSuma = allItemsRubro.reduce((s, it) => { const av = getAvance(it.id, m, tv.tipo); return s + (av?.monto || 0) }, 0)
-                          return (
-                            <React.Fragment key={`${m}-${tv.tipo}`}>
-                              <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '11px' }}>{total > 0 ? fmtPct(suma / total) : '-'}</td>
-                              {mostrarMonto && <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '10px' }}>{montoSuma > 0 ? fmt(montoSuma) : '-'}</td>}
-                            </React.Fragment>
-                          )
-                        }))}
-                      </tr>
-
-                      {/* Contenido del rubro (expandible) */}
-                      {rubroExpandido && (
-                        <>
-                          {g.itemsDirectos.map((it, fi) => renderItemRow(it, fi))}
-                          {g.subgrupos.map((sg, sgi) => {
-                            const tituloKey = `titulo-${gi}-${sgi}`
-                            const tituloExpandido = !!expandidos[tituloKey]
-                            return (
-                              <React.Fragment key={sgi}>
-                                {/* Subtítulo — clickeable */}
-                                <tr style={{ background: '#f0f4f8', cursor: 'pointer' }} onClick={() => toggleExpandido(tituloKey)}>
-                                  <td style={{ padding: '6px 12px 6px 28px', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>
-                                    <span style={{ marginRight: '6px' }}>{tituloExpandido ? '▼' : '▶'}</span>
-                                    {sg.titulo.descripcion}
-                                  </td>
-                                  {mostrarPrecios && <td colSpan={2} />}
-                                  {mostrarPrecios && <td style={{ padding: '6px 6px', textAlign: 'right', fontWeight: '700', fontSize: '11px' }}>
-                                    {fmt(sg.items.reduce((s, it) => s + (it.precio_venta || 0), 0))}
-                                  </td>}
-                                  {mesesVisibles.map(m => tiposVisibles.map(tv => {
-                                    const suma = sg.items.reduce((s, it) => { const av = getAvance(it.id, m, tv.tipo); return s + (av?.porcentaje || 0) * (it.precio_venta || 0) }, 0)
-                                    const total = sg.items.reduce((s, it) => s + (it.precio_venta || 0), 0)
-                                    const montoSuma = sg.items.reduce((s, it) => { const av = getAvance(it.id, m, tv.tipo); return s + (av?.monto || 0) }, 0)
-                                    return (
-                                      <React.Fragment key={`${m}-${tv.tipo}`}>
-                                        <td style={{ padding: '6px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '11px' }}>{total > 0 ? fmtPct(suma / total) : '-'}</td>
-                                        {mostrarMonto && <td style={{ padding: '6px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '10px' }}>{montoSuma > 0 ? fmt(montoSuma) : '-'}</td>}
-                                      </React.Fragment>
-                                    )
-                                  }))}
-                                </tr>
-                                {/* Ítems del subtítulo (expandibles) */}
-                                {tituloExpandido && sg.items.map((it, fi) => renderItemRow(it, fi))}
-                              </React.Fragment>
-                            )
-                          })}
-                        </>
-                      )}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', minWidth: '500px' }}>
+            <thead>
+              <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', minWidth: '200px' }}>Descripción</th>
+                {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>Unid.</th>}
+                {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>Cant.</th>}
+                {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>P.V.</th>}
+                {mesesVisibles.map(m => (
+                  tiposVisibles.map(tv => (
+                    <React.Fragment key={`${m}-${tv.tipo}`}>
+                      <th style={{ padding: '8px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader }}>
+                        M{String(m).padStart(2,'0')} {tv.label}
+                      </th>
+                      {mostrarMonto && <th style={{ padding: '8px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader, opacity: 0.8 }}>$</th>}
                     </React.Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+                  ))
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {secciones.map((s, si) => {
+                if (s.esRubro) return (
+                  <tr key={`r-${si}`} style={{ background: '#1e3a5f' }}>
+                    <td colSpan={99} style={{ padding: '8px 12px', fontWeight: '700', color: 'white', fontSize: '12px' }}>{s.item.descripcion}</td>
+                  </tr>
+                )
+
+                if (s.esItemSuelto) return renderItemRow(s.item, si)
+
+                // Título con items — desplegable
+                const key = `s-${si}`
+                const expandido = !!expandidos[key]
+                const pctRow = (tipo) => {
+                  const p = calcPctPonderado(s.items, mesesVisibles[0] || 1, tipo)
+                  return mesesVisibles.length === 1 && p != null ? fmtPct(p) : '-'
+                }
+                const montoRow = (tipo) => {
+                  if (mesesVisibles.length !== 1) return '-'
+                  const m = calcMonto(s.items, mesesVisibles[0], tipo)
+                  return m > 0 ? fmt(m) : '-'
+                }
+
+                return (
+                  <React.Fragment key={key}>
+                    <tr style={{ background: '#dbeafe', cursor: 'pointer' }} onClick={() => toggleExpandido(key)}>
+                      <td style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px' }}>
+                        <span style={{ marginRight: '8px', fontSize: '10px' }}>{expandido ? '▼' : '▶'}</span>
+                        {s.item.descripcion}
+                      </td>
+                      {mostrarPrecios && <td colSpan={2} />}
+                      {mostrarPrecios && <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>
+                        {fmt(s.items.reduce((acc, it) => acc + (it.precio_venta || 0), 0))}
+                      </td>}
+                      {mesesVisibles.map(m => tiposVisibles.map(tv => {
+                        const p = calcPctPonderado(s.items, m, tv.tipo)
+                        const mo = calcMonto(s.items, m, tv.tipo)
+                        return (
+                          <React.Fragment key={`${m}-${tv.tipo}`}>
+                            <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '11px' }}>{p != null ? fmtPct(p) : '-'}</td>
+                            {mostrarMonto && <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '10px' }}>{mo > 0 ? fmt(mo) : '-'}</td>}
+                          </React.Fragment>
+                        )
+                      }))}
+                    </tr>
+                    {expandido && s.items.map((it, fi) => renderItemRow(it, fi))}
+                  </React.Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+          {/* Advertencia para pctRow y montoRow no usadas directamente */}
+          {false && pctRow && montoRow}
+        </div>
       )}
     </div>
   )

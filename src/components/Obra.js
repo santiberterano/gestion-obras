@@ -100,7 +100,7 @@ function Obra({ obra, perfil, onVolver }) {
           <div style={{ marginTop: '24px', background: 'white', borderRadius: '10px', padding: '24px', border: '1px solid #e5e7eb' }}>
             <h3 style={{ marginBottom: '16px' }}>{botones.find(b => b.id === seccion)?.label}</h3>
             {seccion === 'costo_previsto'
-              ? <CostoPrevisto obra={obra} perfil={perfil} />
+              ? <CostoPrevisto obra={obra} perfil={perfil} onIrAPlanilla={() => setSeccion('planilla_medicion')} />
               : seccion === 'explosion_insumos'
               ? <ExplosionInsumos obra={obra} perfil={perfil} />
               : seccion === 'costo_explotado'

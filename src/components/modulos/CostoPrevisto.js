@@ -587,7 +587,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                               <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.total,0))}</td>
                               <td style={{ padding: '8px 12px', textAlign: 'right', color: '#fde68a', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.indirectos_absorbidos,0))}</td>
                               <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.costo_ajustado,0))}</td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', color: '#86efac', fontWeight: '700', fontSize: '14px' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.precio_venta,0))}</td>
+                              <td style={{ padding: '8px 12px', textAlign: 'right', color: '#86efac', fontWeight: '700', fontSize: '14px' }}>${fmt(calcularPlanilla().filter(f => !f.tipo || f.tipo === 'item').reduce((s,f) => s+f.precio_venta,0))}</td>
                             </tr>
                           </tbody>
                         </table>
@@ -664,7 +664,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                           ))}
                           <tr style={{ background: '#1e3a5f' }}>
                             <td colSpan={4} style={{ padding: '12px', fontWeight: '700', color: 'white', fontSize: '14px' }}>TOTAL PRECIO DE VENTA</td>
-                            <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'white', fontSize: '15px' }}>${fmt(planillaGenerada.reduce((s,f) => s + (f.precio_venta||0), 0))}</td>
+                            <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'white', fontSize: '15px' }}>${fmt(planillaGenerada.filter(f => f.tipo === 'item').reduce((s,f) => s + (f.precio_venta||0), 0))}</td>
                           </tr>
                         </tbody>
                       </table>

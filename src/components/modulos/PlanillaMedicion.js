@@ -1,6 +1,33 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../supabaseClient'
 
+// Paleta CONSCA+
+const C = {
+  negro: '#0A0A0A',
+  grisOscuro: '#1A1A1A',
+  grisMedio: '#252525',
+  grisPanel: '#1E1E1E',
+  grisClaro: '#3A3A3A',
+  grisTexto: '#9A9A9A',
+  grisBorde: '#2E2E2E',
+  grisBorde2: '#383838',
+  amarillo: '#F5A800',
+  amarilloSuave: 'rgba(245,168,0,0.12)',
+  blanco: '#FFFFFF',
+  blancoSuave: '#E0E0E0',
+  // colores datos
+  azulIni: '#4A90D9',
+  azulIniBg: '#1A2A3A',
+  verdeReal: '#4CAF7D',
+  verdeRealBg: '#0F2A1A',
+  naranjaCor: '#F5A800',
+  naranjaCorBg: '#2A1E00',
+}
+
+const estiloBase = {
+  fontFamily: "'Roboto', sans-serif",
+}
+
 function PlanillaMedicion({ obra, perfil }) {
   const [items, setItems] = useState([])
   const [avances, setAvances] = useState([])
@@ -49,23 +76,42 @@ function PlanillaMedicion({ obra, perfil }) {
     return avances.find(a => a.planilla_item_id === itemId && a.mes === mes && a.tipo === tipo)
   }
 
-  // Estructura plana: lista de secciones, cada una con titulo y sus items
-  // Los rubros se muestran como separadores visuales, los titulos como secciones desplegables
+  // ─── Estructura de secciones ───────────────────────────────────────────────
+  // FIX: los items sueltos (sin titulo) se agrupan bajo el rubro como sección colapsable
   const secciones = []
   let seccionActual = null
+  let rubroActual = null
+
   for (const it of items) {
     if (it.tipo === 'rubro') {
-      // El rubro es solo un separador visual, no una sección desplegable
-      secciones.push({ esRubro: true, item: it })
+      // Cerramos sección implícita anterior si existía
       seccionActual = null
+      rubroActual = it
+      secciones.push({ esRubro: true, item: it })
     } else if (it.tipo === 'titulo') {
       seccionActual = { esRubro: false, esTitulo: true, item: it, items: [] }
+      rubroActual = null
       secciones.push(seccionActual)
     } else if (it.tipo === 'item') {
       if (seccionActual) {
+        // Hay un título abierto → agregar ahí
         seccionActual.items.push(it)
+      } else if (rubroActual) {
+        // Ítems directos bajo un rubro (sin título intermedio) → sección implícita colapsable
+        // Buscamos si ya existe una sección implícita para este rubro
+        const ultimaSeccion = secciones[secciones.length - 1]
+        if (ultimaSeccion && ultimaSeccion.esSeccionImplicita && ultimaSeccion.rubroId === rubroActual.id) {
+          ultimaSeccion.items.push(it)
+        } else {
+          const nuevaSeccion = { esSeccionImplicita: true, rubroId: rubroActual.id, item: rubroActual, items: [it] }
+          secciones.push(nuevaSeccion)
+          // Reemplazamos el rubro-separador por esta sección implícita
+          // (el rubro ya fue pushado, lo marcamos para no renderizar separado)
+          const idxRubro = secciones.findIndex(s => s.esRubro && s.item.id === rubroActual.id)
+          if (idxRubro !== -1) secciones[idxRubro]._oculto = true
+          seccionActual = nuevaSeccion
+        }
       } else {
-        // Items sin título van en una sección implícita
         secciones.push({ esItemSuelto: true, item: it })
       }
     }
@@ -77,7 +123,9 @@ function PlanillaMedicion({ obra, perfil }) {
 
   function expandirTodo() {
     const keys = {}
-    secciones.forEach((s, i) => { if (s.esTitulo) keys[`s-${i}`] = true })
+    secciones.forEach((s, i) => {
+      if (s.esTitulo || s.esSeccionImplicita) keys[`s-${i}`] = true
+    })
     setExpandidos(keys)
   }
 
@@ -166,9 +214,9 @@ function PlanillaMedicion({ obra, perfil }) {
   const totalVenta = items.filter(it => it.tipo === 'item').reduce((s, it) => s + (it.precio_venta || 0), 0)
 
   const tiposVisibles = [
-    { tipo: 'proyeccion_inicial', label: 'P.Ini', color: '#2d4a6e', bgHeader: '#2d4a6e' },
-    { tipo: 'real', label: 'Real', color: '#16a34a', bgHeader: '#1a5c3a' },
-    { tipo: 'proyeccion_corregida', label: 'P.Cor', color: '#ca8a04', bgHeader: '#7c5a00' },
+    { tipo: 'proyeccion_inicial', label: 'P.Ini', color: C.azulIni,     bgHeader: C.azulIniBg },
+    { tipo: 'real',               label: 'Real',  color: C.verdeReal,   bgHeader: C.verdeRealBg },
+    { tipo: 'proyeccion_corregida', label: 'P.Cor', color: C.naranjaCor, bgHeader: C.naranjaCorBg },
   ]
 
   function calcPctPonderado(itemsList, m, tipo) {
@@ -183,18 +231,18 @@ function PlanillaMedicion({ obra, perfil }) {
 
   function renderItemRow(it, fi) {
     return (
-      <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-        <td style={{ padding: '5px 12px 5px 32px', fontSize: '12px' }}>{it.descripcion}</td>
-        {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', color: '#888', fontSize: '11px' }}>{it.unidad}</td>}
-        {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', fontSize: '11px' }}>{it.cantidad != null ? Number(it.cantidad).toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '-'}</td>}
-        {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: '600', fontSize: '11px' }}>{fmt(it.precio_venta)}</td>}
+      <tr key={it.id} style={{ background: fi % 2 === 0 ? C.grisOscuro : C.grisMedio, borderBottom: `1px solid ${C.grisBorde}` }}>
+        <td style={{ padding: '5px 12px 5px 32px', fontSize: '12px', color: C.blancoSuave }}>{it.descripcion}</td>
+        {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', color: C.grisTexto, fontSize: '11px' }}>{it.unidad}</td>}
+        {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', color: C.grisTexto, fontSize: '11px' }}>{it.cantidad != null ? Number(it.cantidad).toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '-'}</td>}
+        {mostrarPrecios && <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: '600', fontSize: '11px', color: C.blancoSuave }}>{fmt(it.precio_venta)}</td>}
         {mesesVisibles.map(m => (
           tiposVisibles.map(tv => {
             const av = getAvance(it.id, m, tv.tipo)
             return (
               <React.Fragment key={`${m}-${tv.tipo}`}>
-                <td style={{ padding: '5px 3px', textAlign: 'right', color: tv.color, fontSize: '11px' }}>{av ? fmtPct(av.porcentaje) : '-'}</td>
-                {mostrarMonto && <td style={{ padding: '5px 3px', textAlign: 'right', color: tv.color, fontSize: '10px' }}>{av?.monto ? fmt(av.monto) : '-'}</td>}
+                <td style={{ padding: '5px 3px', textAlign: 'right', color: av ? tv.color : C.grisClaro, fontSize: '11px' }}>{av ? fmtPct(av.porcentaje) : '-'}</td>
+                {mostrarMonto && <td style={{ padding: '5px 3px', textAlign: 'right', color: av?.monto ? tv.color : C.grisClaro, fontSize: '10px' }}>{av?.monto ? fmt(av.monto) : '-'}</td>}
               </React.Fragment>
             )
           })
@@ -203,168 +251,284 @@ function PlanillaMedicion({ obra, perfil }) {
     )
   }
 
-  if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
+  // ─── Render de sección colapsable (título o sección implícita de rubro) ───
+  function renderSeccionColapsable(s, si) {
+    const key = `s-${si}`
+    const expandido = !!expandidos[key]
+    const esImpl = s.esSeccionImplicita
 
-  if (items.length === 0) return (
-    <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
-      La planilla de medición se genera desde <b>Costo Previsto → Generar Planilla de Cotización</b>.
+    return (
+      <React.Fragment key={key}>
+        {/* Fila de cabecera del rubro/titulo colapsable */}
+        <tr
+          style={{ background: esImpl ? C.negro : '#1C2840', cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => toggleExpandido(key)}
+        >
+          <td style={{
+            padding: esImpl ? '9px 12px' : '7px 12px 7px 24px',
+            fontWeight: '700',
+            color: esImpl ? C.amarillo : '#7EB3E8',
+            fontSize: esImpl ? '12px' : '11px',
+            letterSpacing: esImpl ? '0.06em' : '0.03em',
+            textTransform: esImpl ? 'uppercase' : 'none',
+          }}>
+            <span style={{ marginRight: '8px', fontSize: '10px', opacity: 0.7 }}>{expandido ? '▼' : '▶'}</span>
+            {s.item.descripcion}
+          </td>
+          {mostrarPrecios && <td colSpan={2} />}
+          {mostrarPrecios && (
+            <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '700', color: esImpl ? C.amarillo : '#7EB3E8', fontSize: '11px' }}>
+              {fmt(s.items.reduce((acc, it) => acc + (it.precio_venta || 0), 0))}
+            </td>
+          )}
+          {mesesVisibles.map(m => tiposVisibles.map(tv => {
+            const p = calcPctPonderado(s.items, m, tv.tipo)
+            const mo = calcMonto(s.items, m, tv.tipo)
+            return (
+              <React.Fragment key={`${m}-${tv.tipo}`}>
+                <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: p != null ? tv.color : C.grisClaro, fontSize: '11px' }}>{p != null ? fmtPct(p) : '-'}</td>
+                {mostrarMonto && <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: mo > 0 ? tv.color : C.grisClaro, fontSize: '10px' }}>{mo > 0 ? fmt(mo) : '-'}</td>}
+              </React.Fragment>
+            )
+          }))}
+        </tr>
+        {expandido && s.items.map((it, fi) => renderItemRow(it, fi))}
+      </React.Fragment>
+    )
+  }
+
+  // ─── Render formulario de carga ────────────────────────────────────────────
+  function renderFilaCarga(it, fi, mesesEdit) {
+    const ultimoPct = [...mesesEdit].reverse().map(m => parseFloat(String(porcentajes[`${it.id}-${m}`] || '').replace(',','.'))).find(v => !isNaN(v) && v > 0) || 0
+    const monto = it.precio_venta && ultimoPct > 0 ? (ultimoPct / 100) * it.precio_venta : null
+    return (
+      <tr key={it.id} style={{ background: fi % 2 === 0 ? C.grisOscuro : C.grisMedio, borderBottom: `1px solid ${C.grisBorde}` }}>
+        <td style={{ padding: '6px 12px 6px 24px', color: C.blancoSuave, fontSize: '12px' }}>{it.descripcion}</td>
+        <td style={{ padding: '6px 12px', textAlign: 'right', color: C.grisTexto, fontSize: '12px' }}>{fmt(it.precio_venta)}</td>
+        {mesesEdit.map(m => (
+          <td key={m} style={{ padding: '4px 4px', textAlign: 'right' }}>
+            <input type="number" min="0" max="100" step="0.1"
+              value={porcentajes[`${it.id}-${m}`] || ''}
+              onChange={ev => setPorcentajes(prev => ({ ...prev, [`${it.id}-${m}`]: ev.target.value }))}
+              style={{
+                width: '58px', padding: '3px 6px',
+                border: `1px solid ${C.grisBorde2}`,
+                borderRadius: '3px', fontSize: '12px', textAlign: 'right',
+                background: C.grisClaro, color: C.blanco,
+                fontFamily: "'Roboto', sans-serif",
+                outline: 'none',
+              }} />
+          </td>
+        ))}
+        <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? C.amarillo : C.grisClaro, fontSize: '12px', fontWeight: monto ? '600' : '400' }}>{monto ? fmt(monto) : '-'}</td>
+      </tr>
+    )
+  }
+
+  if (cargando) return (
+    <div style={{ ...estiloBase, padding: '40px', textAlign: 'center', color: C.grisTexto }}>
+      <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+      Cargando...
     </div>
   )
 
+  if (items.length === 0) return (
+    <div style={{ ...estiloBase, padding: '60px', textAlign: 'center', color: C.grisTexto, fontSize: '15px' }}>
+      <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+      La planilla de medición se genera desde <b style={{ color: C.blancoSuave }}>Costo Previsto → Generar Planilla de Cotización</b>.
+    </div>
+  )
+
+  // ─── Estilos de botones reutilizables ──────────────────────────────────────
+  const btnBase = {
+    fontFamily: "'Roboto', sans-serif",
+    fontWeight: '600',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    letterSpacing: '0.03em',
+    transition: 'all 0.15s',
+  }
+
   return (
-    <div>
-      {/* Barra sticky de controles — ARRIBA DE TODO */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'white', borderBottom: '2px solid #e2e8f0', padding: '8px 0 8px', marginBottom: '16px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap' }}>Mes:</span>
-        <button onClick={() => setMesSeleccionado(null)}
-          style={{ padding: '3px 10px', background: !mesSeleccionado ? '#2563eb' : 'white', color: !mesSeleccionado ? 'white' : '#555', border: '1px solid ' + (!mesSeleccionado ? '#2563eb' : '#e2e8f0'), borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
-          Todos
-        </button>
+    <div style={{ ...estiloBase, background: C.negro, minHeight: '100%', color: C.blanco }}>
+      <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+
+      {/* ── Barra sticky de controles ── */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        background: C.grisOscuro,
+        borderBottom: `2px solid ${C.amarillo}`,
+        padding: '8px 12px',
+        marginBottom: '16px',
+        display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center',
+      }}>
+        <span style={{ fontSize: '11px', color: C.grisTexto, whiteSpace: 'nowrap', fontWeight: '500', letterSpacing: '0.08em' }}>MES:</span>
+        <button onClick={() => setMesSeleccionado(null)} style={{
+          ...btnBase,
+          padding: '3px 10px',
+          background: !mesSeleccionado ? C.amarillo : 'transparent',
+          color: !mesSeleccionado ? C.negro : C.grisTexto,
+          border: `1px solid ${!mesSeleccionado ? C.amarillo : C.grisBorde2}`,
+        }}>Todos</button>
         {meses.map(m => (
-          <button key={m} onClick={() => setMesSeleccionado(m)}
-            style={{ padding: '3px 10px', background: mesSeleccionado === m ? '#2563eb' : 'white', color: mesSeleccionado === m ? 'white' : '#555', border: '1px solid ' + (mesSeleccionado === m ? '#2563eb' : '#e2e8f0'), borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
-            M{String(m).padStart(2,'0')}
-          </button>
+          <button key={m} onClick={() => setMesSeleccionado(m)} style={{
+            ...btnBase,
+            padding: '3px 10px',
+            background: mesSeleccionado === m ? C.amarillo : 'transparent',
+            color: mesSeleccionado === m ? C.negro : C.grisTexto,
+            border: `1px solid ${mesSeleccionado === m ? C.amarillo : C.grisBorde2}`,
+          }}>M{String(m).padStart(2,'0')}</button>
         ))}
-        <div style={{ width: '1px', height: '18px', background: '#e2e8f0' }} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer' }}>
-          <input type="checkbox" checked={mostrarPrecios} onChange={e => setMostrarPrecios(e.target.checked)} /> Precios
+
+        <div style={{ width: '1px', height: '18px', background: C.grisBorde2 }} />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', color: C.grisTexto, userSelect: 'none' }}>
+          <input type="checkbox" checked={mostrarPrecios} onChange={e => setMostrarPrecios(e.target.checked)}
+            style={{ accentColor: C.amarillo }} /> Precios
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer' }}>
-          <input type="checkbox" checked={mostrarMonto} onChange={e => setMostrarMonto(e.target.checked)} /> Montos $
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', color: C.grisTexto, userSelect: 'none' }}>
+          <input type="checkbox" checked={mostrarMonto} onChange={e => setMostrarMonto(e.target.checked)}
+            style={{ accentColor: C.amarillo }} /> Montos $
         </label>
-        <div style={{ width: '1px', height: '18px', background: '#e2e8f0' }} />
-        <button onClick={expandirTodo} style={{ padding: '3px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: '#555', whiteSpace: 'nowrap' }}>+ Expandir todo</button>
-        <button onClick={colapsarTodo} style={{ padding: '3px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: '#555', whiteSpace: 'nowrap' }}>- Colapsar todo</button>
-        <div style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: '700', color: '#2563eb', whiteSpace: 'nowrap' }}>{fmt(totalVenta)}</div>
+
+        <div style={{ width: '1px', height: '18px', background: C.grisBorde2 }} />
+
+        <button onClick={expandirTodo} style={{ ...btnBase, padding: '3px 10px', background: 'transparent', border: `1px solid ${C.grisBorde2}`, color: C.grisTexto }}>▼ Expandir</button>
+        <button onClick={colapsarTodo} style={{ ...btnBase, padding: '3px 10px', background: 'transparent', border: `1px solid ${C.grisBorde2}`, color: C.grisTexto }}>▶ Colapsar</button>
+
+        <div style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: '700', color: C.amarillo, whiteSpace: 'nowrap' }}>
+          {fmt(totalVenta)}
+        </div>
       </div>
 
-      {/* Info */}
-      <div style={{ marginBottom: '12px', display: 'flex', gap: '16px', fontSize: '11px' }}>
-        {duracionMeses && <span style={{ color: '#888' }}>Duración: {duracionMeses} meses</span>}
-        <span style={{ color: '#2d4a6e', fontWeight: '600' }}>■ Proy. Inicial</span>
-        <span style={{ color: '#16a34a', fontWeight: '600' }}>■ Real</span>
-        <span style={{ color: '#ca8a04', fontWeight: '600' }}>■ Proy. Corregida</span>
+      {/* ── Info / leyenda ── */}
+      <div style={{ marginBottom: '12px', display: 'flex', gap: '20px', fontSize: '11px', padding: '0 4px', flexWrap: 'wrap' }}>
+        {duracionMeses && <span style={{ color: C.grisTexto }}>Duración: <b style={{ color: C.blancoSuave }}>{duracionMeses} meses</b></span>}
+        <span style={{ color: C.azulIni, fontWeight: '600' }}>■ Proy. Inicial</span>
+        <span style={{ color: C.verdeReal, fontWeight: '600' }}>■ Real</span>
+        <span style={{ color: C.naranjaCor, fontWeight: '600' }}>■ Proy. Corregida</span>
       </div>
 
-      {/* Botones jefe de obra */}
+      {/* ── Botones jefe de obra ── */}
       {esJefe && (
         <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-          <button onClick={() => { setVistaJefe('ver'); setTipoCarga(null) }}
-            style={{ padding: '10px 20px', background: vistaJefe === 'ver' || !vistaJefe ? '#2563eb' : 'white', color: vistaJefe === 'ver' || !vistaJefe ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+          <button onClick={() => { setVistaJefe('ver'); setTipoCarga(null) }} style={{
+            ...btnBase,
+            padding: '10px 20px', fontSize: '13px',
+            background: vistaJefe === 'ver' || !vistaJefe ? C.amarillo : 'transparent',
+            color: vistaJefe === 'ver' || !vistaJefe ? C.negro : C.amarillo,
+            border: `1px solid ${C.amarillo}`,
+          }}>
             📊 Ver Avance de Obra
           </button>
-          <button onClick={() => { setVistaJefe('cargar'); setTipoCarga(null) }}
-            style={{ padding: '10px 20px', background: vistaJefe === 'cargar' ? '#2563eb' : 'white', color: vistaJefe === 'cargar' ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+          <button onClick={() => { setVistaJefe('cargar'); setTipoCarga(null) }} style={{
+            ...btnBase,
+            padding: '10px 20px', fontSize: '13px',
+            background: vistaJefe === 'cargar' ? C.amarillo : 'transparent',
+            color: vistaJefe === 'cargar' ? C.negro : C.amarillo,
+            border: `1px solid ${C.amarillo}`,
+          }}>
             ✏️ Cargar Avances
           </button>
         </div>
       )}
 
-      {/* Panel opciones de carga */}
+      {/* ── Panel opciones de carga ── */}
       {esJefe && vistaJefe === 'cargar' && !tipoCarga && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px', marginBottom: '20px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Cargar Avances</h4>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <button onClick={() => abrirCarga('proyeccion_inicial')} disabled={tieneProyInicial}
-              style={{ padding: '12px 20px', background: tieneProyInicial ? '#f3f4f6' : 'white', color: tieneProyInicial ? '#aaa' : '#2563eb', border: '1px solid ' + (tieneProyInicial ? '#e2e8f0' : '#2563eb'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: tieneProyInicial ? 'not-allowed' : 'pointer' }}>
-              {tieneProyInicial ? '✓ Proyección Inicial (ya cargada)' : '📋 Cargar Proyección Inicial'}
+        <div style={{ background: C.grisPanel, border: `1px solid ${C.grisBorde2}`, borderRadius: '4px', padding: '20px', marginBottom: '20px' }}>
+          <h4 style={{ margin: '0 0 16px', color: C.amarillo, fontSize: '12px', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Cargar Avances</h4>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button onClick={() => abrirCarga('proyeccion_inicial')} disabled={tieneProyInicial} style={{
+              ...btnBase, padding: '10px 18px',
+              background: tieneProyInicial ? C.grisMedio : 'transparent',
+              color: tieneProyInicial ? C.grisTexto : C.azulIni,
+              border: `1px solid ${tieneProyInicial ? C.grisBorde : C.azulIni}`,
+              cursor: tieneProyInicial ? 'not-allowed' : 'pointer',
+            }}>
+              {tieneProyInicial ? '✓ Proy. Inicial (ya cargada)' : '📋 Cargar Proyección Inicial'}
             </button>
-            <button onClick={() => abrirCarga('real')} disabled={proximoMesReal > (duracionMeses || 0)}
-              style={{ padding: '12px 20px', background: 'white', color: '#16a34a', border: '1px solid #16a34a', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
-              ✅ Medición Real — Mes {String(proximoMesReal).padStart(2,'00')}
+            <button onClick={() => abrirCarga('real')} disabled={proximoMesReal > (duracionMeses || 0)} style={{
+              ...btnBase, padding: '10px 18px',
+              background: 'transparent', color: C.verdeReal,
+              border: `1px solid ${C.verdeReal}`,
+            }}>
+              ✅ Medición Real — Mes {String(proximoMesReal).padStart(2,'0')}
             </button>
-            <button onClick={() => abrirCarga('proyeccion_corregida')} disabled={!tieneProyInicial}
-              style={{ padding: '12px 20px', background: tieneProyInicial ? 'white' : '#f3f4f6', color: tieneProyInicial ? '#ca8a04' : '#aaa', border: '1px solid ' + (tieneProyInicial ? '#ca8a04' : '#e2e8f0'), borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: tieneProyInicial ? 'pointer' : 'not-allowed' }}>
-              📊 Proyección Corregida (meses futuros)
+            <button onClick={() => abrirCarga('proyeccion_corregida')} disabled={!tieneProyInicial} style={{
+              ...btnBase, padding: '10px 18px',
+              background: tieneProyInicial ? 'transparent' : C.grisMedio,
+              color: tieneProyInicial ? C.naranjaCor : C.grisTexto,
+              border: `1px solid ${tieneProyInicial ? C.naranjaCor : C.grisBorde}`,
+              cursor: tieneProyInicial ? 'pointer' : 'not-allowed',
+            }}>
+              📊 Proyección Corregida
             </button>
           </div>
         </div>
       )}
 
-      {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
-      {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
+      {/* ── Mensajes ── */}
+      {error && (
+        <div style={{ padding: '10px 16px', background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: '3px', color: '#f87171', marginBottom: '16px', fontSize: '13px' }}>
+          ⚠️ {error}
+        </div>
+      )}
+      {exito && (
+        <div style={{ padding: '10px 16px', background: 'rgba(76,175,125,0.1)', border: '1px solid rgba(76,175,125,0.3)', borderRadius: '3px', color: C.verdeReal, marginBottom: '16px', fontSize: '13px' }}>
+          ✓ {exito}
+        </div>
+      )}
 
-      {/* Formulario de carga */}
+      {/* ── Formulario de carga ── */}
       {tipoCarga && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px', marginBottom: '20px' }}>
+        <div style={{ background: C.grisPanel, border: `1px solid ${C.grisBorde2}`, borderRadius: '4px', padding: '20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0, color: '#1e3a5f' }}>
+            <h4 style={{ margin: 0, color: C.amarillo, fontSize: '12px', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               {tipoCarga === 'proyeccion_inicial' && 'Proyección Inicial — todos los meses'}
-              {tipoCarga === 'real' && `Medición Real — Mes ${String(proximoMesReal).padStart(2,'00')}`}
-              {tipoCarga === 'proyeccion_corregida' && `Proyección Corregida — meses ${meses.filter(m => !mesesConReal.includes(m)).join(', ')}`}
+              {tipoCarga === 'real' && `Medición Real — Mes ${String(proximoMesReal).padStart(2,'0')}`}
+              {tipoCarga === 'proyeccion_corregida' && `Proyección Corregida — meses futuros`}
             </h4>
-            <button onClick={() => setTipoCarga(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '18px' }}>✕</button>
+            <button onClick={() => setTipoCarga(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.grisTexto, fontSize: '18px', lineHeight: 1 }}>✕</button>
           </div>
           <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
-                <tr style={{ background: '#1e3a5f', color: 'white' }}>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', minWidth: '200px' }}>Ítem</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Precio Venta</th>
+                <tr style={{ background: C.negro }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', minWidth: '200px', color: C.grisTexto, fontWeight: '500', fontSize: '11px', letterSpacing: '0.06em' }}>ÍTEM</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', color: C.grisTexto, fontWeight: '500', fontSize: '11px' }}>PRECIO VENTA</th>
                   {tipoCarga === 'real'
-                    ? <th style={{ padding: '8px 12px', textAlign: 'right', background: '#1a5c3a' }}>% Mes {String(proximoMesReal).padStart(2,'0')}</th>
+                    ? <th style={{ padding: '8px 12px', textAlign: 'right', background: C.verdeRealBg, color: C.verdeReal, fontSize: '11px' }}>% MES {String(proximoMesReal).padStart(2,'0')}</th>
                     : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m)).map(m => (
-                        <th key={m} style={{ padding: '8px 6px', textAlign: 'right', fontSize: '11px', whiteSpace: 'nowrap' }}>Mes {String(m).padStart(2,'0')}</th>
+                        <th key={m} style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px', whiteSpace: 'nowrap', color: C.grisTexto }}>M{String(m).padStart(2,'0')}</th>
                       ))
                   }
-                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Monto (último mes)</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', color: C.grisTexto, fontWeight: '500', fontSize: '11px' }}>MONTO PREVIEW</th>
                 </tr>
               </thead>
               <tbody>
                 {secciones.map((s, si) => {
+                  if (s._oculto) return null
                   if (s.esRubro) return (
-                    <tr key={`r-${si}`} style={{ background: '#dbeafe' }}>
-                      <td colSpan={99} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px' }}>{s.item.descripcion}</td>
+                    <tr key={`r-${si}`} style={{ background: C.negro }}>
+                      <td colSpan={99} style={{ padding: '8px 12px', fontWeight: '700', color: C.amarillo, fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{s.item.descripcion}</td>
                     </tr>
                   )
                   if (s.esItemSuelto) {
                     const it = s.item
                     const mesesEdit = tipoCarga === 'real' ? [proximoMesReal] : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m))
-                    const ultimoPct = [...mesesEdit].reverse().map(m => parseFloat(String(porcentajes[`${it.id}-${m}`] || '').replace(',','.'))).find(v => !isNaN(v) && v > 0) || 0
-                    const monto = it.precio_venta && ultimoPct > 0 ? (ultimoPct / 100) * it.precio_venta : null
-                    return (
-                      <tr key={`is-${si}`} style={{ background: 'white', borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '6px 12px' }}>{it.descripcion}</td>
-                        <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.precio_venta)}</td>
-                        {mesesEdit.map(m => (
-                          <td key={m} style={{ padding: '4px 4px', textAlign: 'right' }}>
-                            <input type="number" min="0" max="100" step="0.1"
-                              value={porcentajes[`${it.id}-${m}`] || ''}
-                              onChange={ev => setPorcentajes(prev => ({ ...prev, [`${it.id}-${m}`]: ev.target.value }))}
-                              style={{ width: '58px', padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', textAlign: 'right' }} />
-                          </td>
-                        ))}
-                        <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? '#2563eb' : '#aaa', fontSize: '12px' }}>{monto ? fmt(monto) : '-'}</td>
-                      </tr>
-                    )
+                    return renderFilaCarga(it, si, mesesEdit)
                   }
-                  // Es título con items
+                  // Sección implícita de rubro o título normal — ambas se renderizan igual en el form
+                  const mesesEdit = tipoCarga === 'real' ? [proximoMesReal] : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m))
                   return (
                     <React.Fragment key={`t-${si}`}>
-                      <tr style={{ background: '#f0f4f8' }}>
-                        <td colSpan={99} style={{ padding: '6px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>{s.item.descripcion}</td>
-                      </tr>
-                      {s.items.map((it, fi) => {
-                        const mesesEdit = tipoCarga === 'real' ? [proximoMesReal] : meses.filter(m => tipoCarga === 'proyeccion_inicial' || !mesesConReal.includes(m))
-                        const ultimoPct = [...mesesEdit].reverse().map(m => parseFloat(String(porcentajes[`${it.id}-${m}`] || '').replace(',','.'))).find(v => !isNaN(v) && v > 0) || 0
-                        const monto = it.precio_venta && ultimoPct > 0 ? (ultimoPct / 100) * it.precio_venta : null
-                        return (
-                          <tr key={it.id} style={{ background: fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '6px 12px 6px 24px' }}>{it.descripcion}</td>
-                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{fmt(it.precio_venta)}</td>
-                            {mesesEdit.map(m => (
-                              <td key={m} style={{ padding: '4px 4px', textAlign: 'right' }}>
-                                <input type="number" min="0" max="100" step="0.1"
-                                  value={porcentajes[`${it.id}-${m}`] || ''}
-                                  onChange={ev => setPorcentajes(prev => ({ ...prev, [`${it.id}-${m}`]: ev.target.value }))}
-                                  style={{ width: '58px', padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', textAlign: 'right' }} />
-                              </td>
-                            ))}
-                            <td style={{ padding: '6px 12px', textAlign: 'right', color: monto ? '#2563eb' : '#aaa', fontSize: '12px' }}>{monto ? fmt(monto) : '-'}</td>
-                          </tr>
-                        )
-                      })}
+                      {!s.esSeccionImplicita && (
+                        <tr style={{ background: '#1C2840' }}>
+                          <td colSpan={99} style={{ padding: '6px 12px', fontWeight: '700', color: '#7EB3E8', fontSize: '11px' }}>{s.item.descripcion}</td>
+                        </tr>
+                      )}
+                      {s.items.map((it, fi) => renderFilaCarga(it, fi, mesesEdit))}
                     </React.Fragment>
                   )
                 })}
@@ -372,32 +536,38 @@ function PlanillaMedicion({ obra, perfil }) {
             </table>
           </div>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-            <button onClick={() => setTipoCarga(null)} style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#555' }}>Cancelar</button>
-            <button onClick={guardar} disabled={guardando}
-              style={{ padding: '8px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: guardando ? 'not-allowed' : 'pointer', opacity: guardando ? 0.6 : 1 }}>
+            <button onClick={() => setTipoCarga(null)} style={{ ...btnBase, padding: '8px 20px', fontSize: '13px', background: 'transparent', border: `1px solid ${C.grisBorde2}`, color: C.grisTexto }}>Cancelar</button>
+            <button onClick={guardar} disabled={guardando} style={{
+              ...btnBase, padding: '8px 24px', fontSize: '13px',
+              background: guardando ? C.grisClaro : C.amarillo,
+              color: guardando ? C.grisTexto : C.negro,
+              border: 'none',
+              cursor: guardando ? 'not-allowed' : 'pointer',
+              opacity: guardando ? 0.7 : 1,
+            }}>
               {guardando ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Tabla de visualización */}
+      {/* ── Tabla de visualización ── */}
       {(!esJefe || vistaJefe === 'ver' || !vistaJefe) && !tipoCarga && (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', minWidth: '500px' }}>
             <thead>
-              <tr style={{ background: '#1e3a5f', color: 'white' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', minWidth: '200px' }}>Descripción</th>
-                {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>Unid.</th>}
-                {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>Cant.</th>}
-                {mostrarPrecios && <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px' }}>P.V.</th>}
+              <tr style={{ background: C.negro, borderBottom: `2px solid ${C.amarillo}` }}>
+                <th style={{ padding: '9px 12px', textAlign: 'left', minWidth: '200px', color: C.grisTexto, fontWeight: '500', fontSize: '10px', letterSpacing: '0.08em' }}>DESCRIPCIÓN</th>
+                {mostrarPrecios && <th style={{ padding: '9px 6px', textAlign: 'right', fontSize: '10px', color: C.grisTexto }}>UNID.</th>}
+                {mostrarPrecios && <th style={{ padding: '9px 6px', textAlign: 'right', fontSize: '10px', color: C.grisTexto }}>CANT.</th>}
+                {mostrarPrecios && <th style={{ padding: '9px 6px', textAlign: 'right', fontSize: '10px', color: C.grisTexto }}>P.V.</th>}
                 {mesesVisibles.map(m => (
                   tiposVisibles.map(tv => (
                     <React.Fragment key={`${m}-${tv.tipo}`}>
-                      <th style={{ padding: '8px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader }}>
+                      <th style={{ padding: '9px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader, color: tv.color, fontWeight: '700' }}>
                         M{String(m).padStart(2,'0')} {tv.label}
                       </th>
-                      {mostrarMonto && <th style={{ padding: '8px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader, opacity: 0.8 }}>$</th>}
+                      {mostrarMonto && <th style={{ padding: '9px 3px', textAlign: 'right', fontSize: '9px', whiteSpace: 'nowrap', background: tv.bgHeader, color: tv.color, opacity: 0.7 }}>$</th>}
                     </React.Fragment>
                   ))
                 ))}
@@ -405,46 +575,23 @@ function PlanillaMedicion({ obra, perfil }) {
             </thead>
             <tbody>
               {secciones.map((s, si) => {
+                if (s._oculto) return null
+
                 if (s.esRubro) return (
-                  <tr key={`r-${si}`} style={{ background: '#1e3a5f' }}>
-                    <td colSpan={99} style={{ padding: '8px 12px', fontWeight: '700', color: 'white', fontSize: '12px' }}>{s.item.descripcion}</td>
+                  <tr key={`r-${si}`} style={{ background: C.negro, borderTop: `1px solid ${C.amarillo}`, borderBottom: `1px solid ${C.grisBorde}` }}>
+                    <td colSpan={99} style={{ padding: '9px 12px', fontWeight: '900', color: C.amarillo, fontSize: '12px', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                      {s.item.descripcion}
+                    </td>
                   </tr>
                 )
 
                 if (s.esItemSuelto) return renderItemRow(s.item, si)
 
-                // Título con items — desplegable
-                const key = `s-${si}`
-                const expandido = !!expandidos[key]
-                return (
-                  <React.Fragment key={key}>
-                    <tr style={{ background: '#dbeafe', cursor: 'pointer' }} onClick={() => toggleExpandido(key)}>
-                      <td style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '12px' }}>
-                        <span style={{ marginRight: '8px', fontSize: '10px' }}>{expandido ? '▼' : '▶'}</span>
-                        {s.item.descripcion}
-                      </td>
-                      {mostrarPrecios && <td colSpan={2} />}
-                      {mostrarPrecios && <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f', fontSize: '11px' }}>
-                        {fmt(s.items.reduce((acc, it) => acc + (it.precio_venta || 0), 0))}
-                      </td>}
-                      {mesesVisibles.map(m => tiposVisibles.map(tv => {
-                        const p = calcPctPonderado(s.items, m, tv.tipo)
-                        const mo = calcMonto(s.items, m, tv.tipo)
-                        return (
-                          <React.Fragment key={`${m}-${tv.tipo}`}>
-                            <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '11px' }}>{p != null ? fmtPct(p) : '-'}</td>
-                            {mostrarMonto && <td style={{ padding: '7px 3px', textAlign: 'right', fontWeight: '700', color: tv.color, fontSize: '10px' }}>{mo > 0 ? fmt(mo) : '-'}</td>}
-                          </React.Fragment>
-                        )
-                      }))}
-                    </tr>
-                    {expandido && s.items.map((it, fi) => renderItemRow(it, fi))}
-                  </React.Fragment>
-                )
+                // Sección colapsable (título o implícita de rubro)
+                return renderSeccionColapsable(s, si)
               })}
             </tbody>
           </table>
-
         </div>
       )}
     </div>

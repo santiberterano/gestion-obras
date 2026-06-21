@@ -225,7 +225,11 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
           const filasDelRubro = filas.slice(idxRubro + 1, idxSigRubro === -1 ? undefined : idxSigRubro)
           const tieneItems = filasDelRubro.some(f => planillaMap[f.id])
           if (!tieneItems) continue
-          const totalRubro = filasDelRubro.reduce((s, f) => s + (planillaMap[f.id]?.precio_venta || 0), 0)
+          const idxTitulo = filasDelRubro.findIndex(x => x.tipo === 'titulo')
+          const itemsDirectosRubro = idxTitulo === -1
+            ? filasDelRubro.filter(x => planillaMap[x.id])
+            : filasDelRubro.slice(0, idxTitulo).filter(x => planillaMap[x.id])
+          const totalRubro = itemsDirectosRubro.reduce((s, f) => s + (planillaMap[f.id]?.precio_venta || 0), 0)
           itemsConRubro.push({
             obra_id: obra.id, costo_previsto_id: fila.id, orden,
             tipo: 'rubro', codigo: null, descripcion: fila.descripcion,

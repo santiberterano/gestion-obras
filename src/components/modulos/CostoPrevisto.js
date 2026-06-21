@@ -303,7 +303,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
 
     const titulo = [
       [`PLANILLA DE MEDICIÓN — ${meta?.nombre_obra || obra.nombre}`],
-      [`Coeficiente de pase: ${coef} | Duración: ${dur} meses | Generada: ${new Date().toLocaleDateString('es-AR')}`],
+      [`Duración: ${dur} meses | Generada: ${new Date().toLocaleDateString('es-AR')}`],
       [],
       ['ÍTEM', 'DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'PRECIO UNIT. VENTA', 'TOTAL VENTA'],
     ]

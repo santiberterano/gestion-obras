@@ -103,11 +103,10 @@ function PlanillaMedicion({ obra, perfil }) {
         if (ultimaSeccion && ultimaSeccion.esSeccionImplicita && ultimaSeccion.rubroId === rubroActual.id) {
           ultimaSeccion.items.push(it)
         } else {
-          const nuevaSeccion = { esSeccionImplicita: true, rubroId: rubroActual.id, item: rubroActual, items: [it] }
+          const rubroRef = rubroActual
+          const nuevaSeccion = { esSeccionImplicita: true, rubroId: rubroRef.id, item: rubroRef, items: [it] }
           secciones.push(nuevaSeccion)
-          // Reemplazamos el rubro-separador por esta sección implícita
-          // (el rubro ya fue pushado, lo marcamos para no renderizar separado)
-          const idxRubro = secciones.findIndex(s => s.esRubro && s.item.id === rubroActual.id)
+          const idxRubro = secciones.findIndex(s => s.esRubro && s.item.id === rubroRef.id)
           if (idxRubro !== -1) secciones[idxRubro]._oculto = true
           seccionActual = nuevaSeccion
         }

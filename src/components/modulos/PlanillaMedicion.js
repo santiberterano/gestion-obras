@@ -416,16 +416,6 @@ function PlanillaMedicion({ obra, perfil }) {
                 // Título con items — desplegable
                 const key = `s-${si}`
                 const expandido = !!expandidos[key]
-                const pctRow = (tipo) => {
-                  const p = calcPctPonderado(s.items, mesesVisibles[0] || 1, tipo)
-                  return mesesVisibles.length === 1 && p != null ? fmtPct(p) : '-'
-                }
-                const montoRow = (tipo) => {
-                  if (mesesVisibles.length !== 1) return '-'
-                  const m = calcMonto(s.items, mesesVisibles[0], tipo)
-                  return m > 0 ? fmt(m) : '-'
-                }
-
                 return (
                   <React.Fragment key={key}>
                     <tr style={{ background: '#dbeafe', cursor: 'pointer' }} onClick={() => toggleExpandido(key)}>

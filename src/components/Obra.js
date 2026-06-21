@@ -70,33 +70,33 @@ function Obra({ obra, perfil, onVolver }) {
       {/* CONTENIDO */}
       <div style={{ paddingTop: '80px', padding: '80px 24px 40px', maxWidth: '1000px', margin: '0 auto' }}>
 
-        {/* BOTONES DE MÓDULOS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px', marginTop: '8px' }}>
-          {botones.map(b => {
-            const activo = seccion === b.id
-            return (
-              <button key={b.id} onClick={() => setSeccion(b.id)}
-                style={{
-                  padding: '18px 16px',
-                  background: activo ? '#f5a623' : '#1a1a1a',
-                  color: activo ? '#111' : '#999',
-                  border: `1px solid ${activo ? '#f5a623' : '#2a2a2a'}`,
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontWeight: activo ? '600' : '400',
-                  fontSize: '13px',
-                  textAlign: 'left',
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { if (!activo) { e.currentTarget.style.borderColor = '#f5a623'; e.currentTarget.style.color = '#f5a623' } }}
-                onMouseLeave={e => { if (!activo) { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#999' } }}
-              >
-                <span style={{ display: 'block', marginBottom: '6px', fontSize: '18px' }}>{b.icono}</span>
-                {b.label}
-              </button>
-            )
-          })}
-        </div>
+        {/* TABS DE NAVEGACIÓN */}
+<div style={{ display: 'flex', borderBottom: '2px solid #2a2a2a', marginTop: '8px', overflowX: 'auto' }}>
+  {botones.map(b => {
+    const activo = seccion === b.id
+    return (
+      <button key={b.id} onClick={() => setSeccion(b.id)}
+        style={{
+          padding: '10px 18px',
+          background: 'none',
+          color: activo ? '#f5a623' : '#666',
+          border: 'none',
+          borderBottom: `2px solid ${activo ? '#f5a623' : 'transparent'}`,
+          marginBottom: '-2px',
+          cursor: 'pointer',
+          fontWeight: activo ? '600' : '400',
+          fontSize: '13px',
+          whiteSpace: 'nowrap',
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={e => { if (!activo) e.currentTarget.style.color = '#f5a623' }}
+        onMouseLeave={e => { if (!activo) e.currentTarget.style.color = '#666' }}
+      >
+        {b.icono} {b.label}
+      </button>
+    )
+  })}
+</div>
 
         {/* SECCIÓN ACTIVA */}
         {seccion && (

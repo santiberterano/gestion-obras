@@ -662,7 +662,11 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                                         const idxR = planillaGenerada.indexOf(f)
                                         const idxN = planillaGenerada.findIndex((x, ii) => ii > idxR && x.tipo === 'rubro')
                                         const sub = planillaGenerada.slice(idxR + 1, idxN === -1 ? planillaGenerada.length : idxN)
-                                        const total = sub.filter(x => x.tipo === 'item').reduce((s, x) => s + (x.precio_venta || 0), 0)
+                                        const idxTitulo = sub.findIndex(x => x.tipo === 'titulo')
+                                        const itemsDelRubro = idxTitulo === -1
+                                          ? sub.filter(x => x.tipo === 'item')
+                                          : sub.slice(0, idxTitulo).filter(x => x.tipo === 'item')
+                                        const total = itemsDelRubro.reduce((s, x) => s + (x.precio_venta || 0), 0)
                                         return total > 0 ? '$' + fmt(total) : ''
                                       })()
                                     : '$' + fmt(f.precio_venta)

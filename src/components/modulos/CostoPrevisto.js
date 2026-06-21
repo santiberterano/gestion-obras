@@ -657,7 +657,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                                       const total = sub.reduce((s, x) => s + (x.precio_venta || 0), 0)
                                       return total > 0 ? '$' + fmt(total) : ''
                                     })()
-                                  : f.tipo === 'rubro' ? '' : '$' + fmt(f.precio_venta)
+                                  : f.tipo === 'rubro' ? '$' + fmt(f.precio_venta) : ...
                                 }
                               </td>
                             </tr>

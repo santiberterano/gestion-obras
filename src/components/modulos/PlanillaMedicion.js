@@ -454,8 +454,7 @@ function PlanillaMedicion({ obra, perfil }) {
               })}
             </tbody>
           </table>
-          {/* Advertencia para pctRow y montoRow no usadas directamente */}
-          {false && pctRow && montoRow}
+
         </div>
       )}
     </div>

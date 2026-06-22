@@ -8,14 +8,14 @@ function Obra({ obra, perfil, onVolver }) {
   const [seccion, setSeccion] = useState(null)
 
   const botones = [
-    { id: 'costo_previsto',    label: 'Costo Previsto'       },
-    { id: 'costo_abierto',     label: 'Costo Abierto'        },
-    { id: 'costo_explotado',   label: 'Costo Explotado'      },
-    { id: 'explosion_insumos', label: 'Explosión de Insumos' },
-    { id: 'planilla_medicion', label: 'Planilla de Medición' },
-    { id: 'certificados',      label: 'Certificados'         },
-    { id: 'informes',          label: 'Informes'             },
-  ]
+  { id: 'costo_previsto',    label: 'Costo Previsto',       icono: '📋' },
+  { id: 'costo_abierto',     label: 'Costo Abierto',        icono: '📂' },
+  { id: 'costo_explotado',   label: 'Costo Explotado',      icono: '🧮' },
+  { id: 'explosion_insumos', label: 'Explosión de Insumos', icono: '📦' },
+  { id: 'planilla_medicion', label: 'Planilla de Medición', icono: '📊' },
+  { id: 'certificados',      label: 'Certificados',         icono: '🏅' },
+  { id: 'informes',          label: 'Informes',             icono: '📈' },
+]
 
   const formatMoney = (n) => n ? '$' + Number(n).toLocaleString('es-AR') : '-'
 
@@ -89,7 +89,7 @@ function Obra({ obra, perfil, onVolver }) {
               onMouseEnter={e => { if (!activo) e.currentTarget.style.color = '#ccc' }}
               onMouseLeave={e => { if (!activo) e.currentTarget.style.color = '#666' }}
             >
-              {b.label}
+              {b.icono} {b.label}
               {/* Punto indicador */}
               <span style={{
                 position: 'absolute',

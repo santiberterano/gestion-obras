@@ -3,6 +3,7 @@ import CostoPrevisto from './modulos/CostoPrevisto'
 import ExplosionInsumos from './modulos/ExplosionInsumos'
 import CostoExplotado from './modulos/CostoExplotado'
 import PlanillaMedicion from './modulos/PlanillaMedicion'
+import Certificados from './modulos/Certificados'
 
 function Obra({ obra, perfil, onVolver }) {
   const [seccion, setSeccion] = useState(null)
@@ -116,15 +117,17 @@ function Obra({ obra, perfil, onVolver }) {
         ) : (
           <div style={{ background: '#f8f7f4', borderRadius: '10px', padding: '24px', borderTop: '3px solid #f5a623' }}>
             {seccion === 'costo_previsto'
-              ? <CostoPrevisto obra={obra} perfil={perfil} onIrAPlanilla={() => setSeccion('planilla_medicion')} />
-              : seccion === 'explosion_insumos'
-              ? <ExplosionInsumos obra={obra} perfil={perfil} />
-              : seccion === 'costo_explotado'
-              ? <CostoExplotado obra={obra} perfil={perfil} />
-              : seccion === 'planilla_medicion'
-              ? <PlanillaMedicion obra={obra} perfil={perfil} />
-              : <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '14px' }}>Módulo en desarrollo.</div>
-            }
+  ? <CostoPrevisto obra={obra} perfil={perfil} onIrAPlanilla={() => setSeccion('planilla_medicion')} />
+  : seccion === 'explosion_insumos'
+  ? <ExplosionInsumos obra={obra} perfil={perfil} />
+  : seccion === 'costo_explotado'
+  ? <CostoExplotado obra={obra} perfil={perfil} />
+  : seccion === 'planilla_medicion'
+  ? <PlanillaMedicion obra={obra} perfil={perfil} />
+  : seccion === 'certificados'
+  ? <Certificados obra={obra} perfil={perfil} />
+  : <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '14px' }}>Módulo en desarrollo.</div>
+}
           </div>
         )}
       </div>

@@ -137,7 +137,7 @@ function Certificados({ obra, perfil }) {
     const totalObra = filas.reduce((s, f) => s + f.precioTotal, 0)
     const obraBasica = filas.reduce((s, f) => s + f.pctAvanceActual * f.precioTotal, 0)
     const desacopioPct = parseFloat(cert?.desacopio_pct || desaciopioPct || 0) / 100
-    const desacopio = totalObra * desacopioPct
+    const desacopio = obraBasica * desacopioPct
     const montoCert = obraBasica - desacopio
     const indiceBase = parseFloat(cert?.indice_base_valor || indiceBaseValor || 0)
     const ajusteMes  = parseFloat(cert?.ajuste_mes_valor  || ajusteMesValor  || 0)
@@ -357,7 +357,12 @@ function Certificados({ obra, perfil }) {
               <tr style={{ background: '#1e3a5f', color: 'white' }}>
                 <td colSpan={2} style={{ padding: '8px', fontWeight: '700' }}>PRECIO TOTAL</td>
                 <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(totales.totalObra)}</td>
-                <td colSpan={6} />
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmtPct(filas.reduce((s,f) => s + f.pctAcumAnterior * f.precioTotal, 0) / (totales.totalObra || 1))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmtPct(filas.reduce((s,f) => s + f.pctAvanceActual * f.precioTotal, 0) / (totales.totalObra || 1))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmtPct(filas.reduce((s,f) => s + f.pctAcumActual * f.precioTotal, 0) / (totales.totalObra || 1))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(filas.reduce((s,f) => s + f.pctAcumAnterior * f.precioTotal, 0))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(filas.reduce((s,f) => s + f.pctAvanceActual * f.precioTotal, 0))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(filas.reduce((s,f) => s + f.pctAcumActual * f.precioTotal, 0))}</td>
               </tr>
             </tbody>
           </table>
@@ -465,7 +470,12 @@ function Certificados({ obra, perfil }) {
               <tr style={{ background: '#1e3a5f', color: 'white' }}>
                 <td colSpan={2} style={{ padding: '8px', fontWeight: '700' }}>PRECIO TOTAL</td>
                 <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(totales.totalObra)}</td>
-                <td colSpan={6} />
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmtPct(filas.reduce((s,f) => s + f.pctAcumAnterior * f.precioTotal, 0) / (totales.totalObra || 1))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmtPct(filas.reduce((s,f) => s + f.pctAvanceActual * f.precioTotal, 0) / (totales.totalObra || 1))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmtPct(filas.reduce((s,f) => s + f.pctAcumActual * f.precioTotal, 0) / (totales.totalObra || 1))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(filas.reduce((s,f) => s + f.pctAcumAnterior * f.precioTotal, 0))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(filas.reduce((s,f) => s + f.pctAvanceActual * f.precioTotal, 0))}</td>
+                <td style={{ padding: '8px', textAlign: 'right', fontWeight: '700' }}>{fmt(filas.reduce((s,f) => s + f.pctAcumActual * f.precioTotal, 0))}</td>
               </tr>
             </tbody>
           </table>

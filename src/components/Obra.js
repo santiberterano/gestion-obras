@@ -64,7 +64,7 @@ function Obra({ obra, perfil, onVolver }) {
       <div style={{
         position: 'fixed', top: '56px', left: 0, right: 0, zIndex: 99,
         background: '#141414', borderBottom: '1px solid #2a2a2a',
-        display: 'flex', alignItems: 'stretch', overflowX: 'auto',justifyContent: 'center'
+        display: 'flex', alignItems: 'stretch', overflowX: 'auto',justifyContent: 'center',
         scrollbarWidth: 'none',
       }}>
         {botones.map(b => {

@@ -1,22 +1,27 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
+import AdminDashboard from './components/AdminDashboard'
+import NuevaObra from './components/NuevaObra'
 
 function App() {
   const [session, setSession] = useState(null)
-  const [perfil, setPerfil] = useState(null)
+  const [perfil, setPerfil]   = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) cargarPerfil(session.user.id)
+      else setLoading(false)
     })
 
     supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session) cargarPerfil(session.user.id)
-      else setPerfil(null)
+      else { setPerfil(null); setLoading(false) }
     })
   }, [])
 
@@ -27,11 +32,35 @@ function App() {
       .eq('id', userId)
       .single()
     setPerfil(data)
+    setLoading(false)
   }
 
   if (!session) return <Login />
-  if (!perfil) return <p>Cargando...</p>
-  return <Dashboard perfil={perfil} />
+  if (loading)  return <p style={{ color: '#999', padding: 24 }}>Cargando...</p>
+
+  // Ruta inicial según área del perfil
+  const inicio = perfil?.area === 'administracion' ? '/admin' : '/dashboard'
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to={inicio} replace />} />
+
+        {/* Dashboard general (resto de áreas) */}
+        <Route path="/dashboard" element={<Dashboard perfil={perfil} />} />
+
+        {/* Administración */}
+        <Route path="/admin"      element={<AdminDashboard />} />
+        <Route path="/nueva-obra" element={<NuevaObra />} />
+
+        {/* Obra individual — ya existía */}
+        <Route path="/obras/:id"  element={<Dashboard perfil={perfil} />} />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to={inicio} replace />} />
+      </Routes>
+    </BrowserRouter>
+  )
 }
 
 export default App

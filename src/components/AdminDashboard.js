@@ -1,0 +1,488 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
+import './AdminDashboard.css';
+
+// ── Constantes ────────────────────────────────────────────
+const ESTADOS = [
+  { key: 'en_curso',   label: 'En curso',     desc: 'Obras activas en ejecución' },
+  { key: 'contratada', label: 'Contratadas',   desc: 'Ganadas, sin inicio' },
+  { key: 'estudiada',  label: 'Estudiadas',    desc: 'Presupuestadas, sin ganar' },
+  { key: 'finalizada', label: 'Finalizadas',   desc: 'Obras terminadas' },
+];
+
+const KPI_TABS = [
+  { key: 'ratios',     label: 'Ratios de negocio' },
+  { key: 'produccion', label: 'Producción' },
+  { key: 'desvios',    label: 'Desvíos' },
+  { key: 'categoria',  label: 'Por categoría' },
+  { key: 'clientes',   label: 'Clientes' },
+];
+
+const CATEGORIA_LABELS = {
+  gris:                 'Gris',
+  llave_en_mano:        'Llave en mano',
+  tareas_seleccionadas: 'Tareas seleccionadas',
+  remodelacion:         'Remodelación',
+};
+
+const PIE_COLORS = ['#f5a623', '#3b82f6', '#22c55e', '#a855f7', '#6b7280'];
+
+// ── Helpers ───────────────────────────────────────────────
+function fmtM(n) {
+  if (!n && n !== 0) return '—';
+  return Number(n).toLocaleString('es-AR');
+}
+
+function fmtPeso(n) {
+  if (!n && n !== 0) return '—';
+  return '$' + Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+}
+
+function pct(a, b) {
+  if (!b || b === 0) return 0;
+  return Math.round((a / b) * 100);
+}
+
+// Donut SVG simple
+function Donut({ value, total, color, size = 64 }) {
+  const r = 24;
+  const circ = 2 * Math.PI * r;
+  const filled = total > 0 ? (value / total) * circ : 0;
+  const p = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+      <circle cx="32" cy="32" r={r} fill="none" stroke="#2a2a2a" strokeWidth="8" />
+      <circle
+        cx="32" cy="32" r={r} fill="none"
+        stroke={color} strokeWidth="8"
+        strokeDasharray={`${filled} ${circ - filled}`}
+        strokeDashoffset={circ * 0.25}
+        strokeLinecap="round"
+      />
+      <text x="32" y="36" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="500">
+        {p}%
+      </text>
+    </svg>
+  );
+}
+
+// Pie SVG
+function PieChart({ slices, size = 110 }) {
+  const r = 38;
+  const circ = 2 * Math.PI * r;
+  const total = slices.reduce((s, sl) => s + sl.value, 0);
+  let offset = 0;
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100">
+      {slices.map((sl, i) => {
+        const dash = total > 0 ? (sl.value / total) * circ : 0;
+        const el = (
+          <circle
+            key={i}
+            cx="50" cy="50" r={r}
+            fill="none"
+            stroke={PIE_COLORS[i % PIE_COLORS.length]}
+            strokeWidth="24"
+            strokeDasharray={`${dash} ${circ - dash}`}
+            strokeDashoffset={-offset}
+          />
+        );
+        offset += dash;
+        return el;
+      })}
+      <circle cx="50" cy="50" r="26" fill="#111" />
+    </svg>
+  );
+}
+
+// ── Slider hook ───────────────────────────────────────────
+function useSlider(count, visible = 3) {
+  const [pos, setPos] = useState(0);
+  const trackRef = useRef(null);
+
+  const max = Math.max(0, count - visible);
+
+  function go(dir) {
+    setPos(p => Math.max(0, Math.min(max, p + dir)));
+  }
+
+  function goTo(i) { setPos(Math.max(0, Math.min(max, i))); }
+
+  useEffect(() => {
+    if (!trackRef.current) return;
+    const cardW = trackRef.current.parentElement.offsetWidth / visible;
+    trackRef.current.style.transform = `translateX(-${pos * (cardW + 12)}px)`;
+  }, [pos, visible]);
+
+  return { pos, go, goTo, max, trackRef };
+}
+
+// ── Slider wrapper ────────────────────────────────────────
+function KpiSlider({ children, count, visible = 3 }) {
+  const { pos, go, goTo, max, trackRef } = useSlider(count, visible);
+  const dots = Math.max(1, max + 1);
+
+  return (
+    <div className="slider-outer">
+      <button className="slider-arrow slider-arrow--left" onClick={() => go(-1)}>‹</button>
+      <div className="slider-viewport">
+        <div className="slider-track" ref={trackRef}>
+          {children}
+        </div>
+      </div>
+      <button className="slider-arrow slider-arrow--right" onClick={() => go(1)}>›</button>
+      {dots > 1 && (
+        <div className="slider-dots">
+          {Array.from({ length: dots }).map((_, i) => (
+            <button
+              key={i}
+              className={`slider-dot${pos === i ? ' slider-dot--active' : ''}`}
+              onClick={() => goTo(i)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// COMPONENTE PRINCIPAL
+// ══════════════════════════════════════════════════════════
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+
+  const [obras, setObras] = useState([]);
+  const [jefes, setJefes] = useState({});   // { obra_id: [{ nombre }] }
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('ratios');
+
+  // ── Carga de datos ──────────────────────────────────────
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+
+      // Obras
+      const { data: obrasData, error: obrasErr } = await supabase
+        .from('obras')
+        .select('id, codigo, nombre, estado, costo_previsto_total, m2, categoria_obra, cliente, es_obra_basica')
+        .order('created_at', { ascending: false });
+
+      if (obrasErr) { console.error(obrasErr); setLoading(false); return; }
+
+      setObras(obrasData || []);
+
+      // Jefes de obra asignados
+      const { data: asignaciones } = await supabase
+        .from('usuario_obra')
+        .select('obra_id, perfiles(nombre)');
+
+      const map = {};
+      (asignaciones || []).forEach(a => {
+        if (!map[a.obra_id]) map[a.obra_id] = [];
+        if (a.perfiles?.nombre) map[a.obra_id].push(a.perfiles.nombre);
+      });
+      setJefes(map);
+
+      setLoading(false);
+    }
+    fetchData();
+  }, []);
+
+  // ── Datos derivados para KPIs ───────────────────────────
+  const obrasPorEstado = estado => obras.filter(o => o.estado === estado);
+
+  const ganadas = obras.filter(o =>
+    ['contratada', 'en_curso', 'finalizada'].includes(o.estado)
+  );
+  const totalEmitido  = obras.reduce((s, o) => s + (o.costo_previsto_total || 0), 0);
+  const totalGanado   = ganadas.reduce((s, o) => s + (o.costo_previsto_total || 0), 0);
+  const totalM2       = obras.reduce((s, o) => s + (o.m2 || 0), 0);
+  const avgM2         = obras.length > 0 ? Math.round(totalM2 / obras.length) : 0;
+
+  // Categorías
+  const porCategoria = Object.entries(CATEGORIA_LABELS).map(([key, label]) => {
+    const subset = obras.filter(o => o.categoria_obra === key);
+    return {
+      label,
+      count: subset.length,
+      m2: subset.reduce((s, o) => s + (o.m2 || 0), 0),
+      monto: subset.reduce((s, o) => s + (o.costo_previsto_total || 0), 0),
+    };
+  }).filter(c => c.count > 0);
+
+  // Clientes (pie)
+  const clienteMap = {};
+  obras.forEach(o => {
+    const c = o.cliente || 'Sin cliente';
+    if (!clienteMap[c]) clienteMap[c] = 0;
+    clienteMap[c] += o.m2 || 0;
+  });
+  const clienteSlices = Object.entries(clienteMap)
+    .map(([nombre, m2]) => ({ nombre, m2, value: m2 }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  // ── Render ──────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="admin-dashboard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <span style={{ color: 'var(--c-text3)', fontSize: 13 }}>Cargando...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-dashboard">
+      <div className="admin-main">
+
+        {/* ── ESTADOS ── */}
+        <div className="estados-header">
+          <div className="section-label" style={{ margin: 0 }}>Estado de obras</div>
+          <button className="btn-nueva-obra" onClick={() => navigate('/nueva-obra')}>
+            + Nueva obra
+          </button>
+        </div>
+
+        <div className="estados-grid">
+          {ESTADOS.map(est => {
+            const lista = obrasPorEstado(est.key);
+            return (
+              <div key={est.key} className="estado-card">
+                <div className="estado-card__header">
+                  <div className={`estado-dot estado-dot--${est.key}`} />
+                  <div className="estado-card__nombre">{est.label}</div>
+                  <div className="estado-card__count">{lista.length}</div>
+                </div>
+                <div className="estado-card__desc">{est.desc}</div>
+
+                {/* Mini-obras (hover vía CSS) */}
+                <div className="obras-mini">
+                  {lista.slice(0, 4).map(obra => {
+                    const nombres = jefes[obra.id] || [];
+                    return (
+                      <div
+                        key={obra.id}
+                        className="obra-mini"
+                        onClick={() => navigate(`/obras/${obra.id}`)}
+                      >
+                        <div className="obra-mini__top">
+                          <span className="obra-mini__nombre">{obra.nombre}</span>
+                          <span className="obra-mini__cod">{obra.codigo}</span>
+                        </div>
+                        {nombres.length > 0 ? (
+                          <div className="obra-mini__jefe obra-mini__jefe--asignado">
+                            Jefe: <span>{nombres.join(', ')}</span>
+                          </div>
+                        ) : (
+                          <div className="obra-mini__jefe">Sin asignar</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {lista.length > 4 && (
+                    <div className="obra-mini__mas">+{lista.length - 4} más</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── KPIs ── */}
+        <div className="kpi-section">
+          <div className="kpi-header">
+            <div className="kpi-main-title">Info</div>
+            <div className="kpi-main-sub">Cómputo y presupuesto</div>
+          </div>
+
+          <div className="kpi-tabs">
+            {KPI_TABS.map(t => (
+              <button
+                key={t.key}
+                className={`kpi-tab${activeTab === t.key ? ' kpi-tab--active' : ''}`}
+                onClick={() => setActiveTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* A — Ratios de negocio */}
+          {activeTab === 'ratios' && (
+            <KpiSlider count={3} visible={3}>
+              <div className="kpi-card">
+                <div className="kpi-card__label">Presupuestos ganados</div>
+                <div className="donut-wrap">
+                  <Donut value={ganadas.length} total={obras.length} color="#f5a623" />
+                  <div>
+                    <div className="donut-info__val">{ganadas.length} / {obras.length}</div>
+                    <div className="donut-info__sub">
+                      Emitido: {fmtPeso(totalEmitido)}<br />
+                      Ganado: {fmtPeso(totalGanado)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-card__label">Avance de certificación</div>
+                <div className="donut-wrap">
+                  {/* Certificados: conectar cuando existan datos reales */}
+                  <Donut value={0} total={totalGanado || 1} color="#22c55e" />
+                  <div>
+                    <div className="donut-info__val">—</div>
+                    <div className="donut-info__sub">
+                      Presupuestado: {fmtPeso(totalGanado)}<br />
+                      Certificado: pendiente
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-card__label">Tareas adicionales</div>
+                <div className="donut-wrap">
+                  <Donut value={0} total={totalGanado || 1} color="#ef4444" />
+                  <div>
+                    <div className="donut-info__val">—</div>
+                    <div className="donut-info__sub">
+                      Presupuestado: {fmtPeso(totalGanado)}<br />
+                      Adicionales: pendiente
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </KpiSlider>
+          )}
+
+          {/* B — Producción */}
+          {activeTab === 'produccion' && (
+            <KpiSlider count={4} visible={3}>
+              <div className="kpi-card">
+                <div className="kpi-card__label">Presupuestos emitidos</div>
+                <div className="kpi-card__value">{obras.length}<span className="kpi-card__unit">obras</span></div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-card__label">M² totales presupuestados</div>
+                <div className="kpi-card__value">{fmtM(totalM2)}<span className="kpi-card__unit">m²</span></div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-card__label">Promedio M² por obra</div>
+                <div className="kpi-card__value">{fmtM(avgM2)}<span className="kpi-card__unit">m²</span></div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-card__label">Tiempo promedio estudio</div>
+                <div className="kpi-card__value">—<span className="kpi-card__unit">días</span></div>
+                <div className="kpi-card__detail">Requiere fecha_inicio_estudio y fecha_cierre_estudio</div>
+              </div>
+            </KpiSlider>
+          )}
+
+          {/* C — Desvíos */}
+          {activeTab === 'desvios' && (
+            <KpiSlider count={2} visible={3}>
+              <div className="kpi-card kpi-card--wide">
+                <div className="kpi-card__label">Desvío por obra — en curso y finalizadas</div>
+                <div className="bar-wrap">
+                  {ganadas.filter(o => ['en_curso', 'finalizada'].includes(o.estado)).length === 0 ? (
+                    <span style={{ fontSize: 12, color: 'var(--c-text3)' }}>Sin datos de costo explotado aún</span>
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--c-text3)' }}>Conectar con tabla costo_explotado</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-card__label" style={{ marginBottom: 14 }}>Familias destacadas</div>
+                <div className="familia-badge">
+                  <div className="familia-badge__label">Mayor desvío</div>
+                  <div className="familia-badge__name" style={{ color: 'var(--c-danger)' }}>—</div>
+                  <div className="familia-badge__pct">Pendiente datos</div>
+                </div>
+                <div className="familia-badge">
+                  <div className="familia-badge__label">Menor desvío</div>
+                  <div className="familia-badge__name" style={{ color: 'var(--c-success)' }}>—</div>
+                  <div className="familia-badge__pct">Pendiente datos</div>
+                </div>
+              </div>
+            </KpiSlider>
+          )}
+
+          {/* D — Por categoría */}
+          {activeTab === 'categoria' && (
+            <KpiSlider count={1} visible={3}>
+              <div className="kpi-card kpi-card--full">
+                <div className="kpi-card__label">Obras por categoría — M² y monto</div>
+                {porCategoria.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 12 }}>
+                    Aún no hay obras con categoría asignada.
+                  </p>
+                ) : (
+                  <table className="cat-table">
+                    <thead>
+                      <tr>
+                        <th>Categoría</th>
+                        <th>Obras</th>
+                        <th>M²</th>
+                        <th>Monto total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {porCategoria.map(c => (
+                        <tr key={c.label}>
+                          <td>{c.label}</td>
+                          <td>{c.count}</td>
+                          <td>{fmtM(c.m2)} m²</td>
+                          <td className="monto">{fmtPeso(c.monto)}</td>
+                        </tr>
+                      ))}
+                      <tr className="total">
+                        <td>Total</td>
+                        <td>{obras.length}</td>
+                        <td>{fmtM(totalM2)} m²</td>
+                        <td>{fmtPeso(totalEmitido)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </KpiSlider>
+          )}
+
+          {/* E — Clientes */}
+          {activeTab === 'clientes' && (
+            <KpiSlider count={1} visible={3}>
+              <div className="kpi-card kpi-card--full">
+                <div className="kpi-card__label">M² por estudio / cliente</div>
+                {clienteSlices.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 12 }}>
+                    Aún no hay obras con cliente asignado.
+                  </p>
+                ) : (
+                  <div className="pie-wrap">
+                    <PieChart slices={clienteSlices} />
+                    <div className="pie-legend">
+                      {clienteSlices.map((sl, i) => (
+                        <div key={sl.nombre} className="pie-leg-item">
+                          <div className="pie-leg-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                          {sl.nombre}
+                          <span className="pie-leg-m2">{fmtM(sl.m2)} m²</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </KpiSlider>
+          )}
+
+        </div>{/* /kpi-section */}
+      </div>{/* /admin-main */}
+    </div>
+  );
+}

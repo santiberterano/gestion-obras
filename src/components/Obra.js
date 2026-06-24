@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { supabase } from '../supabaseClient'
 import CostoPrevisto from './modulos/CostoPrevisto'
 import ExplosionInsumos from './modulos/ExplosionInsumos'
 import CostoExplotado from './modulos/CostoExplotado'
 import PlanillaMedicion from './modulos/PlanillaMedicion'
+import Certificados from './modulos/Certificados'
 
 const BOTONES = [
   { id: 'costo_previsto',         label: 'Costo Previsto' },
@@ -20,7 +23,6 @@ const ESTADO_BADGE = {
   contratada: { bg: '#fef3c7', color: '#d97706' },
   estudiada:  { bg: '#dbeafe', color: '#2563eb' },
   finalizada: { bg: '#f3f4f6', color: '#6b7280' },
-  // compatibilidad con estados viejos
   activa:     { bg: '#dcfce7', color: '#16a34a' },
   pausada:    { bg: '#fef9c3', color: '#ca8a04' },
 }
@@ -29,8 +31,44 @@ function formatMoney(n) {
   return n ? '$' + Number(n).toLocaleString('es-AR') : '-'
 }
 
-function Obra({ obra, perfil, onVolver }) {
+function Obra({ perfil }) {
+  const { id } = useParams()
+  const navigate = useNavigate()
+
+  const [obra, setObra]       = useState(null)
+  const [loading, setLoading] = useState(true)
   const [seccion, setSeccion] = useState(null)
+
+  useEffect(() => {
+    async function cargarObra() {
+      const { data, error } = await supabase
+        .from('obras')
+        .select('*')
+        .eq('id', id)
+        .single()
+      if (error) console.error(error)
+      setObra(data)
+      setLoading(false)
+    }
+    cargarObra()
+  }, [id])
+
+  function handleVolver() {
+    if (perfil?.area === 'jefe_obra') navigate('/dashboard')
+    else navigate('/admin')
+  }
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--c-bg)' }}>
+      <span style={{ color: 'var(--c-text3)', fontSize: 13 }}>Cargando...</span>
+    </div>
+  )
+
+  if (!obra) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--c-bg)' }}>
+      <span style={{ color: 'var(--c-text3)', fontSize: 13 }}>Obra no encontrada.</span>
+    </div>
+  )
 
   const badge = ESTADO_BADGE[obra.estado] || { bg: '#f3f4f6', color: '#6b7280' }
   const estadoLabel = obra.estado
@@ -50,13 +88,11 @@ function Obra({ obra, perfil, onVolver }) {
         height: '54px',
         display: 'flex', alignItems: 'center', gap: '16px',
       }}>
-        {/* Logo */}
         <span className="consca-logo">CONSCA<span>+</span></span>
 
         <div style={{ width: '1px', height: '20px', background: 'var(--c-border)' }} />
 
-        {/* Volver */}
-        <button onClick={onVolver} style={{
+        <button onClick={handleVolver} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           color: 'var(--c-text3)', fontSize: '13px', padding: 0,
           transition: 'color 0.2s',
@@ -69,12 +105,10 @@ function Obra({ obra, perfil, onVolver }) {
 
         <div style={{ width: '1px', height: '20px', background: 'var(--c-border)' }} />
 
-        {/* Nombre */}
         <span style={{ fontWeight: 600, color: 'var(--c-text)', fontSize: '14px', whiteSpace: 'nowrap' }}>
           {obra.nombre}
         </span>
 
-        {/* Datos */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: '16px',
           fontSize: '12px', color: 'var(--c-text2)',
@@ -109,7 +143,6 @@ function Obra({ obra, perfil, onVolver }) {
       {/* CONTENIDO */}
       <div style={{ paddingTop: '78px', padding: '78px 24px 40px', maxWidth: '960px', margin: '0 auto' }}>
 
-        {/* GRID DE MÓDULOS */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -145,7 +178,6 @@ function Obra({ obra, perfil, onVolver }) {
           })}
         </div>
 
-        {/* SECCIÓN ACTIVA */}
         {seccion && (
           <div style={{
             marginTop: '20px',
@@ -168,6 +200,8 @@ function Obra({ obra, perfil, onVolver }) {
               ? <CostoExplotado obra={obra} perfil={perfil} />
               : seccion === 'planilla_medicion'
               ? <PlanillaMedicion obra={obra} perfil={perfil} />
+              : seccion === 'certificados'
+              ? <Certificados obra={obra} perfil={perfil} />
               : <p style={{ color: 'var(--c-text3)', fontSize: 13 }}>Módulo en desarrollo.</p>
             }
           </div>

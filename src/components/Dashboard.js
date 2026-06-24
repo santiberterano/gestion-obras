@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import Obra from './Obra'
 
 function Dashboard({ perfil }) {
+  const navigate = useNavigate()
   const [obras, setObras] = useState([])
-  const [obraSeleccionada, setObraSeleccionada] = useState(null)
 
   useEffect(() => {
     if (perfil) cargarObras()
@@ -45,13 +45,8 @@ function Dashboard({ perfil }) {
 
   if (!perfil) return null
 
-  if (obraSeleccionada) {
-    return <Obra obra={obraSeleccionada} perfil={perfil} onVolver={() => setObraSeleccionada(null)} />
-  }
-
   return (
     <div className="dashboard">
-      {/* Header */}
       <header className="consca-header">
         <span className="consca-logo">CONSCA<span>+</span></span>
         <div className="consca-header__spacer" />
@@ -65,16 +60,16 @@ function Dashboard({ perfil }) {
       </header>
 
       <div className="dashboard__main">
-        <h1 style={{ marginBottom: 20 }}>Obras</h1>
+        <h1 style={{ marginBottom: 20 }}>Mis obras</h1>
         <div className="dashboard__grid">
           {obras.length === 0 && (
-            <p style={{ color: 'var(--c-text3)' }}>No hay obras disponibles.</p>
+            <p style={{ color: 'var(--c-text3)' }}>No tenés obras asignadas.</p>
           )}
           {obras.map(obra => (
             <div
               key={obra.id}
               className="obra-card"
-              onClick={() => setObraSeleccionada(obra)}
+              onClick={() => navigate(`/obras/${obra.id}`)}
             >
               <div className="obra-card__nombre">{obra.nombre}</div>
               {obra.descripcion && (

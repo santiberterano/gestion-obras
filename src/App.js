@@ -5,6 +5,7 @@ import Login from './components/Login'
 import Dashboard from './components/Dashboard'
 import AdminDashboard from './components/AdminDashboard'
 import NuevaObra from './components/NuevaObra'
+import './App.css'
 
 function App() {
   const [session, setSession] = useState(null)
@@ -27,37 +28,25 @@ function App() {
 
   async function cargarPerfil(userId) {
     const { data } = await supabase
-      .from('perfiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+      .from('perfiles').select('*').eq('id', userId).single()
     setPerfil(data)
     setLoading(false)
   }
 
   if (!session) return <Login />
-  if (loading)  return <p style={{ color: '#999', padding: 24 }}>Cargando...</p>
+  if (loading)  return <p style={{ padding: 24, color: '#999' }}>Cargando...</p>
 
-  // Ruta inicial según área del perfil
   const inicio = perfil?.area === 'administracion' ? '/admin' : '/dashboard'
 
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to={inicio} replace />} />
-
-        {/* Dashboard general (resto de áreas) */}
-        <Route path="/dashboard" element={<Dashboard perfil={perfil} />} />
-
-        {/* Administración */}
-        <Route path="/admin"      element={<AdminDashboard />} />
-        <Route path="/nueva-obra" element={<NuevaObra />} />
-
-        {/* Obra individual — ya existía */}
-        <Route path="/obras/:id"  element={<Dashboard perfil={perfil} />} />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to={inicio} replace />} />
+        <Route path="/dashboard"   element={<Dashboard perfil={perfil} />} />
+        <Route path="/admin"       element={<AdminDashboard perfil={perfil} />} />
+        <Route path="/nueva-obra"  element={<NuevaObra />} />
+        <Route path="/obras/:id"   element={<Dashboard perfil={perfil} />} />
+        <Route path="*"            element={<Navigate to={inicio} replace />} />
       </Routes>
     </BrowserRouter>
   )

@@ -6,6 +6,7 @@ import ExplosionInsumos from './modulos/ExplosionInsumos'
 import CostoExplotado from './modulos/CostoExplotado'
 import PlanillaMedicion from './modulos/PlanillaMedicion'
 import Certificados from './modulos/Certificados'
+import CostoAbierto from './modulos/CostoAbierto'
 
 const BOTONES = [
   { id: 'costo_previsto',         label: 'Costo Previsto' },

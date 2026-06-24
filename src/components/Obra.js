@@ -7,6 +7,7 @@ import CostoExplotado from './modulos/CostoExplotado'
 import PlanillaMedicion from './modulos/PlanillaMedicion'
 import Certificados from './modulos/Certificados'
 import CostoAbierto from './modulos/CostoAbierto'
+import InformeHoras from './modulos/InformeHoras'
 
 const BOTONES = [
   { id: 'costo_previsto',         label: 'Costo Previsto' },
@@ -205,6 +206,8 @@ function Obra({ perfil }) {
               ? <Certificados obra={obra} perfil={perfil} />
               : seccion === 'costo_abierto'
               ? <CostoAbierto obra={obra} perfil={perfil} />
+              : seccion === 'informes'
+              ? <InformeHoras obra={obra} perfil={perfil} />
               : <p style={{ color: 'var(--c-text3)', fontSize: 13 }}>Módulo en desarrollo.</p>
             }
           </div>

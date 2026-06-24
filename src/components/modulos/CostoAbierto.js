@@ -92,8 +92,9 @@ function CostoAbierto({ obra, perfil }) {
         }
 
         if (esCostoCosto) {
-          // Sumar insumos del ítem actual para el costo-costo
-          const insumosItem = filasParsed.filter(f => f.codigo_item === codigoActual && f.tipo === 'insumo')
+          // Capturar valor actual para evitar cierre sobre variable de loop
+          const codigoSnapshot = codigoActual
+          const insumosItem = filasParsed.filter(f => f.codigo_item === codigoSnapshot && f.tipo === 'insumo')
           const totalCC = insumosItem.reduce((a, f) => a + (f.total || 0), 0)
           filasParsed.push({
             obra_id: obra.id, orden, tipo: 'costo_costo',

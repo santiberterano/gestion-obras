@@ -203,6 +203,8 @@ function Obra({ perfil }) {
               ? <PlanillaMedicion obra={obra} perfil={perfil} />
               : seccion === 'certificados'
               ? <Certificados obra={obra} perfil={perfil} />
+              : seccion === 'costo_abierto'
+              ? <CostoAbierto obra={obra} perfil={perfil} />
               : <p style={{ color: 'var(--c-text3)', fontSize: 13 }}>Módulo en desarrollo.</p>
             }
           </div>

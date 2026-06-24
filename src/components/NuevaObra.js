@@ -43,14 +43,25 @@ export default function NuevaObra() {
     categoria_obra: '', cliente: '', es_obra_basica: false,
   });
 
-  const [errors, setErrors]     = useState({});
+  const [errors, setErrors]      = useState({});
   const [globalError, setGlobal] = useState('');
-  const [saving, setSaving]     = useState(false);
-  const [jefes, setJefes]       = useState([]);
+  const [saving, setSaving]      = useState(false);
+  const [jefes, setJefes]        = useState([]);
   const [jefeSelec, setJefeSelec] = useState(null);
+  const [perfil, setPerfil]      = useState(null);
 
   useEffect(() => {
-    supabase.from('perfiles').select('id, nombre').eq('area', 'jefe_obra').order('nombre')
+    // Cargar perfil del usuario logueado para saber a dónde redirigir
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.from('perfiles').select('*').eq('id', user.id).single()
+          .then(({ data }) => setPerfil(data));
+      }
+    });
+
+    // Cargar jefes de obra disponibles
+    supabase.from('perfiles').select('id, nombre')
+      .eq('area', 'jefe_obra').order('nombre')
       .then(({ data }) => setJefes(data || []));
   }, []);
 
@@ -83,7 +94,11 @@ export default function NuevaObra() {
     const { data: obraData, error: obraErr } = await supabase
       .from('obras').insert([payload]).select().single();
 
-    if (obraErr) { setGlobal('Error al crear la obra: ' + obraErr.message); setSaving(false); return; }
+    if (obraErr) {
+      setGlobal('Error al crear la obra: ' + obraErr.message);
+      setSaving(false);
+      return;
+    }
 
     if (jefeSelec) {
       const { error: asigErr } = await supabase
@@ -92,12 +107,17 @@ export default function NuevaObra() {
     }
 
     setSaving(false);
-    navigate(`/obras/${obraData.id}`);
+
+    // Redirigir según área del perfil
+    if (perfil?.area === 'administracion') {
+      navigate('/admin');
+    } else {
+      navigate('/dashboard');
+    }
   }
 
   return (
     <div className="nueva-obra">
-      {/* Header */}
       <header className="consca-header">
         <span className="consca-logo">CONSCA<span>+</span></span>
         <div className="consca-header__spacer" />

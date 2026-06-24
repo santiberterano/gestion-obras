@@ -1,33 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../supabaseClient'
 
-// ── Helpers ───────────────────────────────────────────────
 const fmt  = (n) => n != null ? Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
-const fmtH = (n) => n != null ? Number(n).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' hs' : '—'
+const fmtH = (n) => n != null && n > 0 ? Number(n).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' hs' : '—'
 
-function esMO_explotado(fila) {
-  return fila.categoria?.toUpperCase().startsWith('MANO DE OBRA')
-}
-
-function esMO_abierto(fila) {
-  return fila.unidad === 'HS'
-    || fila.descripcion?.toUpperCase().includes('OFICIAL')
-    || fila.descripcion?.toUpperCase().includes('AYUDANTE')
-}
-
-// Horas de MO por unidad de medición para un ítem en una fuente
-function horasMOPorUnidad(insumos, fuente) {
-  return insumos
-    .filter(f => fuente === 'explotado' ? esMO_explotado(f) : esMO_abierto(f))
-    .reduce((s, f) => s + (f.cantidad || 0), 0)
-}
-
-// Badge de origen
 function OrigenBadge({ origen }) {
   const cfg = {
     explotado: { bg: '#dbeafe', color: '#1d4ed8', label: 'Costo Explotado' },
-    abierto:   { bg: '#dcfce7', color: '#15803d', label: 'Costo Abierto' },
-    ausente:   { bg: '#fef3c7', color: '#b45309', label: 'Sin datos de MO' },
+    abierto:   { bg: '#dcfce7', color: '#15803d', label: 'Costo Abierto'   },
+    ausente:   { bg: '#fef3c7', color: '#b45309', label: 'Sin datos MO'    },
   }[origen] || { bg: '#f3f4f6', color: '#6b7280', label: origen }
   return (
     <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
@@ -37,12 +18,13 @@ function OrigenBadge({ origen }) {
 }
 
 export default function InformeHoras({ obra }) {
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
-  const [filas, setFilas]       = useState([])   // filas del informe
-  const [resumen, setResumen]   = useState(null) // totales
-  const [filtroOrigen, setFiltroOrigen] = useState('todos')
-  const [filtroMes, setFiltroMes]       = useState('todos')
+  const [loading, setLoading]             = useState(true)
+  const [error, setError]                 = useState(null)
+  const [filas, setFilas]                 = useState([])
+  const [resumen, setResumen]             = useState(null)
+  const [hsPrevistasTotales, setHsPrevistasTotales] = useState(0)
+  const [filtroOrigen, setFiltroOrigen]   = useState('todos')
+  const [filtroMes, setFiltroMes]         = useState('todos')
   const [mesesDisponibles, setMesesDisponibles] = useState([])
 
   useEffect(() => { cargar() }, [obra.id]) // eslint-disable-line
@@ -50,97 +32,132 @@ export default function InformeHoras({ obra }) {
   async function cargar() {
     setLoading(true); setError(null)
     try {
-      // 1. Planilla items (ítems certificables de esta obra)
+      // ── 1. Planilla items ──────────────────────────────
       const { data: planItems, error: e1 } = await supabase
         .from('planilla_items')
         .select('id, codigo, descripcion, unidad, cantidad, precio_venta, costo_previsto_id')
         .eq('obra_id', obra.id)
         .eq('tipo', 'item')
         .order('orden', { ascending: true })
-      if (e1) throw new Error('Error cargando planilla_items: ' + e1.message)
+      if (e1) throw new Error('Error planilla_items: ' + e1.message)
       if (!planItems?.length) { setFilas([]); setLoading(false); return }
 
-      // 2. Medición real acumulada por ítem (suma de porcentajes reales por mes)
+      // ── 2. Medición real — tomar ÚLTIMO porcentaje por ítem/mes ──
+      // (los porcentajes son acumulados, el último mes es el valor real)
       const { data: avances, error: e2 } = await supabase
         .from('medicion_avances')
         .select('planilla_item_id, mes, porcentaje')
         .eq('obra_id', obra.id)
         .eq('tipo', 'real')
-      if (e2) throw new Error('Error cargando medicion_avances: ' + e2.message)
+        .order('mes', { ascending: true })
+      if (e2) throw new Error('Error medicion_avances: ' + e2.message)
 
       const meses = [...new Set((avances || []).map(a => a.mes))].sort((a, b) => a - b)
       setMesesDisponibles(meses)
 
-      // 3. Costo Explotado — insumos de MO agrupados por codigo_item
-      const { data: explotadoRows } = await supabase
+      // Por ítem: avance acumulado = porcentaje del MES MÁS ALTO disponible
+      const avanceAcumMap = {}  // planilla_item_id → porcentaje acumulado
+      const avancePorMes  = {}  // planilla_item_id → { mes: porcentaje }
+      ;(avances || []).forEach(a => {
+        if (!avancePorMes[a.planilla_item_id]) avancePorMes[a.planilla_item_id] = {}
+        avancePorMes[a.planilla_item_id][a.mes] = a.porcentaje
+        // Mantener el mayor (último mes)
+        if (!avanceAcumMap[a.planilla_item_id] || a.mes > (avanceAcumMap[a.planilla_item_id]?.mes || 0)) {
+          avanceAcumMap[a.planilla_item_id] = { mes: a.mes, porcentaje: a.porcentaje }
+        }
+      })
+
+      // ── 3. Costo Explotado — insumos MO (categoria MANO DE OBRA) ──
+      const { data: expRows } = await supabase
         .from('costo_explotado')
-        .select('codigo_item, categoria, descripcion, unidad, cantidad, precio_unitario')
+        .select('codigo_item, nombre_item, categoria, descripcion, unidad, cantidad')
         .eq('obra_id', obra.id)
         .eq('tipo', 'insumo')
+        .ilike('categoria', 'MANO DE OBRA%')
 
-      // 4. Costo Abierto — insumos de MO agrupados por codigo_item
-      const { data: abiertoRows } = await supabase
+      // Agrupar por codigo_item → suma de hs/unidad de MO
+      const expMap = {} // codigo_item → { hsPorUnidad, insumos[] }
+      ;(expRows || []).forEach(f => {
+        if (!expMap[f.codigo_item]) expMap[f.codigo_item] = { hsPorUnidad: 0, insumos: [] }
+        expMap[f.codigo_item].hsPorUnidad += f.cantidad || 0
+        expMap[f.codigo_item].insumos.push(f)
+      })
+
+      // ── 4. Costo Abierto — insumos MO (unidad HS o HORA) ──
+      const { data: abRows } = await supabase
         .from('costo_abierto')
-        .select('codigo_item, descripcion, unidad, cantidad, precio_unitario')
+        .select('codigo_item, nombre_item, descripcion, unidad, cantidad')
         .eq('obra_id', obra.id)
         .eq('tipo', 'insumo')
+        .or('unidad.eq.HS,unidad.eq.HORA')
 
-      // Indexar por codigo_item
-      const explotadoMap = {}
-      ;(explotadoRows || []).forEach(f => {
-        if (!explotadoMap[f.codigo_item]) explotadoMap[f.codigo_item] = []
-        explotadoMap[f.codigo_item].push(f)
+      const abMap = {} // codigo_item → { hsPorUnidad, insumos[] }
+      ;(abRows || []).forEach(f => {
+        if (!abMap[f.codigo_item]) abMap[f.codigo_item] = { hsPorUnidad: 0, insumos: [] }
+        abMap[f.codigo_item].hsPorUnidad += f.cantidad || 0
+        abMap[f.codigo_item].insumos.push(f)
       })
 
-      const abiertoMap = {}
-      ;(abiertoRows || []).forEach(f => {
-        if (!abiertoMap[f.codigo_item]) abiertoMap[f.codigo_item] = []
-        abiertoMap[f.codigo_item].push(f)
-      })
+      // ── 5. Hs previstas totales desde Explosión de Insumos ──
+      // Tomar items dentro del bloque MANO DE OBRA (entre fila tipo='tipo' con desc MANO DE OBRA
+      // y la siguiente fila tipo='tipo'), filtrar unidad HS o HORA
+      const { data: expInsumos } = await supabase
+        .from('explosion_insumos')
+        .select('orden, tipo, descripcion, unidad, cantidad')
+        .eq('obra_id', obra.id)
+        .order('orden', { ascending: true })
 
-      // 5. Construir filas del informe
+      let hsPrevistasTot = 0
+      if (expInsumos?.length) {
+        // Encontrar inicio del bloque MANO DE OBRA
+        const idxMO = expInsumos.findIndex(
+          f => f.tipo === 'tipo' && f.descripcion?.toUpperCase().includes('MANO DE OBRA')
+        )
+        if (idxMO >= 0) {
+          // Encontrar fin del bloque (próxima fila tipo='tipo' después de MO)
+          const idxFin = expInsumos.findIndex(
+            (f, i) => i > idxMO && f.tipo === 'tipo'
+          )
+          const bloqueMO = expInsumos.slice(
+            idxMO + 1,
+            idxFin === -1 ? undefined : idxFin
+          )
+          hsPrevistasTot = bloqueMO
+            .filter(f => f.tipo === 'item' && (f.unidad === 'HS' || f.unidad === 'HORA') && f.cantidad)
+            .reduce((s, f) => s + (f.cantidad || 0), 0)
+        }
+      }
+      setHsPrevistasTotales(hsPrevistasTot)
+
+      // ── 6. Construir filas del informe ──
       const resultado = planItems.map(item => {
-        // Avances reales por mes
-        const avancesItem = (avances || []).filter(a => a.planilla_item_id === item.id)
-        const avanceAcumulado = avancesItem.reduce((s, a) => s + (a.porcentaje || 0), 0)
+        const codigo = item.codigo
 
-        // Avance por mes para desglose
-        const porMes = {}
-        avancesItem.forEach(a => { porMes[a.mes] = (porMes[a.mes] || 0) + a.porcentaje })
+        // Avance acumulado = porcentaje del último mes medido
+        const acumData = avanceAcumMap[item.id]
+        const avanceAcumulado = acumData?.porcentaje || 0
+        const porMes = avancePorMes[item.id] || {}
+        const sinMedicion = !acumData
 
-        // Buscar en Costo Explotado primero, luego Abierto
-        let insumosMO = []
+        // Buscar MO: primero Explotado, luego Abierto
         let origen = 'ausente'
         let hsPorUnidad = 0
 
-        const codigo = item.codigo
-
-        if (codigo && explotadoMap[codigo]) {
-          const insumos = explotadoMap[codigo].filter(esMO_explotado)
-          if (insumos.length > 0) {
-            insumosMO = insumos
-            origen = 'explotado'
-            hsPorUnidad = horasMOPorUnidad(insumos, 'explotado')
-          }
+        if (codigo && expMap[codigo]) {
+          origen = 'explotado'
+          hsPorUnidad = expMap[codigo].hsPorUnidad
+        } else if (codigo && abMap[codigo]) {
+          origen = 'abierto'
+          hsPorUnidad = abMap[codigo].hsPorUnidad
         }
 
-        if (origen === 'ausente' && codigo && abiertoMap[codigo]) {
-          const insumos = abiertoMap[codigo].filter(esMO_abierto)
-          if (insumos.length > 0) {
-            insumosMO = insumos
-            origen = 'abierto'
-            hsPorUnidad = horasMOPorUnidad(insumos, 'abierto')
-          }
-        }
-
-        // Horas previstas (cantidad del ítem × hs/unidad)
         const cantidadItem = item.cantidad || 0
-        const hsPrevistas = cantidadItem * hsPorUnidad
+        const hsPrevistas  = cantidadItem * hsPorUnidad
 
-        // Horas consumidas = hsPrevistas × avance acumulado real
+        // Hs consumidas = hsPrevistas × avance acumulado
         const hsConsumidas = hsPrevistas * avanceAcumulado
 
-        // Horas consumidas por mes
+        // Hs consumidas por mes (cada mes tiene su porcentaje acumulado)
         const hsConsumidasPorMes = {}
         meses.forEach(m => {
           const pct = porMes[m] || 0
@@ -148,48 +165,51 @@ export default function InformeHoras({ obra }) {
         })
 
         return {
-          id:            item.id,
+          id: item.id,
           codigo,
           descripcion:   item.descripcion,
           unidad:        item.unidad,
           cantidad:      cantidadItem,
           precioVenta:   item.precio_venta,
           origen,
-          insumosMO,
           hsPorUnidad,
           hsPrevistas,
           avanceAcumulado,
           hsConsumidas,
           hsConsumidasPorMes,
           porMes,
-          sinMedicion:   avancesItem.length === 0,
+          sinMedicion,
         }
       })
 
-      // Resumen
-      const totalHsPrevistas  = resultado.reduce((s, r) => s + r.hsPrevistas, 0)
-      const totalHsConsumidas = resultado.reduce((s, r) => s + r.hsConsumidas, 0)
-      const sinDatos          = resultado.filter(r => r.origen === 'ausente').length
-      const deExplotado       = resultado.filter(r => r.origen === 'explotado').length
-      const deAbierto         = resultado.filter(r => r.origen === 'abierto').length
-      const sinMedicion       = resultado.filter(r => r.sinMedicion).length
+      // ── 7. Resumen ──
+      const totalHsPrevistasItems = resultado.reduce((s, r) => s + r.hsPrevistas, 0)
+      const totalHsConsumidas     = resultado.reduce((s, r) => s + r.hsConsumidas, 0)
 
-      setResumen({ totalHsPrevistas, totalHsConsumidas, sinDatos, deExplotado, deAbierto, sinMedicion, total: resultado.length })
+      setResumen({
+        totalHsPrevistasItems,
+        totalHsConsumidas,
+        sinDatos:    resultado.filter(r => r.origen === 'ausente').length,
+        deExplotado: resultado.filter(r => r.origen === 'explotado').length,
+        deAbierto:   resultado.filter(r => r.origen === 'abierto').length,
+        sinMedicion: resultado.filter(r => r.sinMedicion).length,
+        total:       resultado.length,
+      })
       setFilas(resultado)
+
     } catch (err) {
       setError(err.message)
     }
     setLoading(false)
   }
 
-  // Filtros
+  // ── Filtros ────────────────────────────────────────────
   const filasFiltradas = filas.filter(r => {
     if (filtroOrigen !== 'todos' && r.origen !== filtroOrigen) return false
     if (filtroMes !== 'todos' && !(r.porMes[Number(filtroMes)] > 0)) return false
     return true
   })
 
-  // Horas consumidas según filtro de mes
   function hsConsumidasFiltradas(r) {
     if (filtroMes === 'todos') return r.hsConsumidas
     return r.hsConsumidasPorMes[Number(filtroMes)] || 0
@@ -214,22 +234,32 @@ export default function InformeHoras({ obra }) {
     </div>
   )
 
+  const totalHsFiltradas     = filasFiltradas.reduce((s, r) => s + r.hsPrevistas, 0)
+  const totalHsConsFiltradas = filasFiltradas.reduce((s, r) => s + hsConsumidasFiltradas(r), 0)
+
   return (
     <div>
 
-      {/* ── Resumen ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px', marginBottom: '24px' }}>
+      {/* ── Resumen cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: '10px', marginBottom: '24px' }}>
         {[
-          { label: 'Hs. previstas total', value: fmtH(resumen.totalHsPrevistas), color: 'var(--c-text)' },
-          { label: 'Hs. consumidas (real)', value: fmtH(resumen.totalHsConsumidas), color: 'var(--c-gold)' },
-          { label: '% ejecutado MO', value: resumen.totalHsPrevistas > 0 ? (resumen.totalHsConsumidas / resumen.totalHsPrevistas * 100).toFixed(1) + '%' : '—', color: 'var(--c-success)' },
-          { label: 'De Costo Explotado', value: resumen.deExplotado + ' ítems', color: '#1d4ed8' },
-          { label: 'De Costo Abierto', value: resumen.deAbierto + ' ítems', color: '#15803d' },
-          { label: 'Sin datos MO', value: resumen.sinDatos + ' ítems', color: resumen.sinDatos > 0 ? 'var(--c-danger)' : 'var(--c-text3)' },
+          { label: 'Hs previstas (explosión)', value: fmtH(hsPrevistasTotales),             color: 'var(--c-text)' },
+          { label: 'Hs previstas (ítems)',      value: fmtH(resumen.totalHsPrevistasItems),  color: 'var(--c-text)' },
+          { label: 'Hs consumidas (real)',       value: fmtH(resumen.totalHsConsumidas),      color: 'var(--c-gold)' },
+          { label: '% ejecutado MO',
+            value: resumen.totalHsPrevistasItems > 0
+              ? (resumen.totalHsConsumidas / resumen.totalHsPrevistasItems * 100).toFixed(1) + '%'
+              : '—',
+            color: 'var(--c-success)' },
+          { label: 'De Costo Explotado',  value: resumen.deExplotado + ' ítems', color: '#1d4ed8' },
+          { label: 'De Costo Abierto',    value: resumen.deAbierto   + ' ítems', color: '#15803d' },
+          { label: 'Sin datos MO',
+            value: resumen.sinDatos + ' ítems',
+            color: resumen.sinDatos > 0 ? 'var(--c-danger)' : 'var(--c-text3)' },
         ].map(card => (
           <div key={card.label} style={{ background: 'var(--c-surface)', border: '1px solid var(--c-border)', borderRadius: '10px', padding: '14px 16px', borderTop: '3px solid var(--c-gold)' }}>
             <div style={{ fontSize: '10px', color: 'var(--c-text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{card.label}</div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: card.color }}>{card.value}</div>
+            <div style={{ fontSize: '18px', fontWeight: '700', color: card.color }}>{card.value}</div>
           </div>
         ))}
       </div>
@@ -237,37 +267,37 @@ export default function InformeHoras({ obra }) {
       {/* ── Filtros ── */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
         <span style={{ fontSize: '11px', color: 'var(--c-text3)' }}>Origen:</span>
-        {['todos', 'explotado', 'abierto', 'ausente'].map(o => (
-          <button key={o} onClick={() => setFiltroOrigen(o)}
-            style={{ padding: '4px 12px', fontSize: '11px', fontWeight: '500', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
-              background: filtroOrigen === o ? 'var(--c-gold)' : 'white',
-              color: filtroOrigen === o ? 'white' : 'var(--c-text2)',
-              borderColor: filtroOrigen === o ? 'var(--c-gold)' : 'var(--c-border)',
-            }}>
-            {o === 'todos' ? 'Todos' : o === 'explotado' ? 'Explotado' : o === 'abierto' ? 'Abierto' : 'Sin datos'}
-          </button>
+        {[
+          { k: 'todos',     l: 'Todos' },
+          { k: 'explotado', l: 'Explotado' },
+          { k: 'abierto',   l: 'Abierto' },
+          { k: 'ausente',   l: 'Sin datos' },
+        ].map(o => (
+          <button key={o.k} onClick={() => setFiltroOrigen(o.k)} style={{
+            padding: '4px 12px', fontSize: '11px', fontWeight: '500', borderRadius: '20px',
+            border: '1px solid', cursor: 'pointer',
+            background: filtroOrigen === o.k ? 'var(--c-gold)' : 'white',
+            color:      filtroOrigen === o.k ? 'white' : 'var(--c-text2)',
+            borderColor:filtroOrigen === o.k ? 'var(--c-gold)' : 'var(--c-border)',
+          }}>{o.l}</button>
         ))}
 
         <div style={{ width: '1px', height: '18px', background: 'var(--c-border)' }} />
 
         <span style={{ fontSize: '11px', color: 'var(--c-text3)' }}>Mes:</span>
-        <button onClick={() => setFiltroMes('todos')}
-          style={{ padding: '4px 12px', fontSize: '11px', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
-            background: filtroMes === 'todos' ? 'var(--c-gold)' : 'white',
-            color: filtroMes === 'todos' ? 'white' : 'var(--c-text2)',
-            borderColor: filtroMes === 'todos' ? 'var(--c-gold)' : 'var(--c-border)',
-          }}>
-          Acumulado
-        </button>
+        <button onClick={() => setFiltroMes('todos')} style={{
+          padding: '4px 12px', fontSize: '11px', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
+          background: filtroMes === 'todos' ? 'var(--c-gold)' : 'white',
+          color:      filtroMes === 'todos' ? 'white' : 'var(--c-text2)',
+          borderColor:filtroMes === 'todos' ? 'var(--c-gold)' : 'var(--c-border)',
+        }}>Acumulado</button>
         {mesesDisponibles.map(m => (
-          <button key={m} onClick={() => setFiltroMes(String(m))}
-            style={{ padding: '4px 12px', fontSize: '11px', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
-              background: filtroMes === String(m) ? 'var(--c-gold)' : 'white',
-              color: filtroMes === String(m) ? 'white' : 'var(--c-text2)',
-              borderColor: filtroMes === String(m) ? 'var(--c-gold)' : 'var(--c-border)',
-            }}>
-            Mes {String(m).padStart(2, '0')}
-          </button>
+          <button key={m} onClick={() => setFiltroMes(String(m))} style={{
+            padding: '4px 12px', fontSize: '11px', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
+            background: filtroMes === String(m) ? 'var(--c-gold)' : 'white',
+            color:      filtroMes === String(m) ? 'white' : 'var(--c-text2)',
+            borderColor:filtroMes === String(m) ? 'var(--c-gold)' : 'var(--c-border)',
+          }}>Mes {String(m).padStart(2, '0')}</button>
         ))}
       </div>
 
@@ -276,19 +306,16 @@ export default function InformeHoras({ obra }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead>
             <tr style={{ background: 'var(--c-text)', color: 'white' }}>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: '600' }}>Ítem</th>
-              <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>Cant.</th>
-              <th style={{ padding: '8px 8px', textAlign: 'center', fontWeight: '600' }}>Origen MO</th>
-              <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>Hs/unid.</th>
-              <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>Hs previstas</th>
-              <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap', background: '#15803d' }}>
+              <th style={{ padding: '8px 12px', textAlign: 'left',   fontWeight: '600' }}>Ítem</th>
+              <th style={{ padding: '8px 8px',  textAlign: 'right',  fontWeight: '600', whiteSpace: 'nowrap' }}>Cant.</th>
+              <th style={{ padding: '8px 8px',  textAlign: 'center', fontWeight: '600' }}>Origen MO</th>
+              <th style={{ padding: '8px 8px',  textAlign: 'right',  fontWeight: '600', whiteSpace: 'nowrap' }}>Hs/unid.</th>
+              <th style={{ padding: '8px 8px',  textAlign: 'right',  fontWeight: '600', whiteSpace: 'nowrap' }}>Hs previstas</th>
+              <th style={{ padding: '8px 8px',  textAlign: 'right',  fontWeight: '600', whiteSpace: 'nowrap', background: '#15803d' }}>
                 % {filtroMes === 'todos' ? 'acum.' : `M${String(filtroMes).padStart(2,'0')}`}
               </th>
-              <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap', background: '#15803d' }}>
+              <th style={{ padding: '8px 8px',  textAlign: 'right',  fontWeight: '600', whiteSpace: 'nowrap', background: '#15803d' }}>
                 Hs consumidas
-              </th>
-              <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                Desvío
               </th>
             </tr>
           </thead>
@@ -296,9 +323,6 @@ export default function InformeHoras({ obra }) {
             {filasFiltradas.map((r, i) => {
               const hsC = hsConsumidasFiltradas(r)
               const avC = avanceFiltrado(r)
-              const hsPrev = filtroMes === 'todos' ? r.hsPrevistas : r.hsPrevistas // previstas siempre sobre total
-              const desvio = hsPrev > 0 ? ((hsC - hsPrev * avC) / (hsPrev * avC)) * 100 : null
-
               return (
                 <tr key={r.id} style={{ background: i % 2 === 0 ? 'white' : 'var(--c-surface2)', borderBottom: '1px solid var(--c-border)' }}>
                   <td style={{ padding: '7px 12px' }}>
@@ -316,39 +340,34 @@ export default function InformeHoras({ obra }) {
                     {r.hsPorUnidad > 0 ? fmt(r.hsPorUnidad) : '—'}
                   </td>
                   <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '600', color: 'var(--c-text)' }}>
-                    {r.hsPrevistas > 0 ? fmtH(r.hsPrevistas) : '—'}
+                    {fmtH(r.hsPrevistas)}
                   </td>
                   <td style={{ padding: '7px 8px', textAlign: 'right', color: '#15803d', fontWeight: '600' }}>
-                    {avC > 0 ? (avC * 100).toFixed(1) + '%' : r.sinMedicion ? <span style={{ color: 'var(--c-text3)' }}>Sin medición</span> : '0%'}
+                    {avC > 0
+                      ? (avC * 100).toFixed(1) + '%'
+                      : r.sinMedicion
+                        ? <span style={{ color: 'var(--c-text3)', fontWeight: '400' }}>Sin medición</span>
+                        : '0%'}
                   </td>
                   <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', color: 'var(--c-gold)' }}>
-                    {hsC > 0 ? fmtH(hsC) : '—'}
-                  </td>
-                  <td style={{ padding: '7px 8px', textAlign: 'right' }}>
-                    {desvio != null && isFinite(desvio) ? (
-                      <span style={{ color: desvio > 10 ? 'var(--c-danger)' : desvio < -5 ? 'var(--c-success)' : 'var(--c-text2)', fontWeight: '600' }}>
-                        {desvio > 0 ? '+' : ''}{desvio.toFixed(1)}%
-                      </span>
-                    ) : <span style={{ color: 'var(--c-text3)' }}>—</span>}
+                    {fmtH(hsC)}
                   </td>
                 </tr>
               )
             })}
           </tbody>
-          {/* Totales */}
           <tfoot>
             <tr style={{ background: 'var(--c-text)', color: 'white' }}>
               <td colSpan={4} style={{ padding: '10px 12px', fontWeight: '700', fontSize: '13px' }}>
                 Total — {filasFiltradas.length} ítems
               </td>
               <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '700' }}>
-                {fmtH(filasFiltradas.reduce((s, r) => s + r.hsPrevistas, 0))}
+                {fmtH(totalHsFiltradas)}
               </td>
               <td />
               <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '700', color: 'var(--c-gold)' }}>
-                {fmtH(filasFiltradas.reduce((s, r) => s + hsConsumidasFiltradas(r), 0))}
+                {fmtH(totalHsConsFiltradas)}
               </td>
-              <td />
             </tr>
           </tfoot>
         </table>

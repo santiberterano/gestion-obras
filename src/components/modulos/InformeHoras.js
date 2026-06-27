@@ -24,6 +24,7 @@ export default function InformeHoras({ obra }) {
   async function cargar() {
     setLoading(true)
     setError(null)
+    console.log('[InformeHoras] obra.id:', obra.id)  // ← acá
     try {
 
       // ── 1. Items de planilla de medición ──────────────────────────────────

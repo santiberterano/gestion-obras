@@ -7,7 +7,6 @@ const fmtH = (n) => n != null && n > 0 ? Number(n).toLocaleString('es-AR', { min
 function OrigenBadge({ origen }) {
   const cfg = {
     explotado: { bg: '#dbeafe', color: '#1d4ed8', label: 'Costo Explotado' },
-    abierto:   { bg: '#dcfce7', color: '#15803d', label: 'Costo Abierto'   },
     ausente:   { bg: '#fef3c7', color: '#b45309', label: 'Sin datos MO'    },
   }[origen] || { bg: '#f3f4f6', color: '#6b7280', label: origen }
   return (
@@ -18,14 +17,14 @@ function OrigenBadge({ origen }) {
 }
 
 export default function InformeHoras({ obra }) {
-  const [loading, setLoading]             = useState(true)
-  const [error, setError]                 = useState(null)
-  const [filas, setFilas]                 = useState([])
-  const [resumen, setResumen]             = useState(null)
+  const [loading, setLoading]                       = useState(true)
+  const [error, setError]                           = useState(null)
+  const [filas, setFilas]                           = useState([])
+  const [resumen, setResumen]                       = useState(null)
   const [hsPrevistasTotales, setHsPrevistasTotales] = useState(0)
-  const [filtroOrigen, setFiltroOrigen]   = useState('todos')
-  const [filtroMes, setFiltroMes]         = useState('todos')
-  const [mesesDisponibles, setMesesDisponibles] = useState([])
+  const [filtroOrigen, setFiltroOrigen]             = useState('todos')
+  const [filtroMes, setFiltroMes]                   = useState('todos')
+  const [mesesDisponibles, setMesesDisponibles]     = useState([])
 
   useEffect(() => { cargar() }, [obra.id]) // eslint-disable-line
 
@@ -42,26 +41,24 @@ export default function InformeHoras({ obra }) {
       if (e1) throw new Error('Error planilla_items: ' + e1.message)
       if (!planItems?.length) { setFilas([]); setLoading(false); return }
 
-      // ── 2. Medición real — tomar ÚLTIMO porcentaje por ítem/mes ──
-      // (los porcentajes son acumulados, el último mes es el valor real)
+      // ── 2. Avances SOLO tipo real — último porcentaje por ítem ──
       const { data: avances, error: e2 } = await supabase
         .from('medicion_avances')
         .select('planilla_item_id, mes, porcentaje')
         .eq('obra_id', obra.id)
-        .eq('tipo', 'real')
+        .eq('tipo', 'real')                   // ← solo real
         .order('mes', { ascending: true })
       if (e2) throw new Error('Error medicion_avances: ' + e2.message)
 
       const meses = [...new Set((avances || []).map(a => a.mes))].sort((a, b) => a - b)
       setMesesDisponibles(meses)
 
-      // Por ítem: avance acumulado = porcentaje del MES MÁS ALTO disponible
-      const avanceAcumMap = {}  // planilla_item_id → porcentaje acumulado
+      // Por ítem: avance acumulado = porcentaje del MES MÁS ALTO medido (real)
+      const avanceAcumMap = {}  // planilla_item_id → { mes, porcentaje }
       const avancePorMes  = {}  // planilla_item_id → { mes: porcentaje }
       ;(avances || []).forEach(a => {
         if (!avancePorMes[a.planilla_item_id]) avancePorMes[a.planilla_item_id] = {}
         avancePorMes[a.planilla_item_id][a.mes] = a.porcentaje
-        // Mantener el mayor (último mes)
         if (!avanceAcumMap[a.planilla_item_id] || a.mes > (avanceAcumMap[a.planilla_item_id]?.mes || 0)) {
           avanceAcumMap[a.planilla_item_id] = { mes: a.mes, porcentaje: a.porcentaje }
         }
@@ -76,31 +73,13 @@ export default function InformeHoras({ obra }) {
         .ilike('categoria', 'MANO DE OBRA%')
 
       // Agrupar por codigo_item → suma de hs/unidad de MO
-      const expMap = {} // codigo_item → { hsPorUnidad, insumos[] }
+      const expMap = {} // codigo_item → { hsPorUnidad }
       ;(expRows || []).forEach(f => {
-        if (!expMap[f.codigo_item]) expMap[f.codigo_item] = { hsPorUnidad: 0, insumos: [] }
+        if (!expMap[f.codigo_item]) expMap[f.codigo_item] = { hsPorUnidad: 0 }
         expMap[f.codigo_item].hsPorUnidad += f.cantidad || 0
-        expMap[f.codigo_item].insumos.push(f)
       })
 
-      // ── 4. Costo Abierto — insumos MO (unidad HS o HORA) ──
-      const { data: abRows } = await supabase
-        .from('costo_abierto')
-        .select('codigo_item, nombre_item, descripcion, unidad, cantidad')
-        .eq('obra_id', obra.id)
-        .eq('tipo', 'insumo')
-        .or('unidad.eq.HS,unidad.eq.HORA')
-
-      const abMap = {} // codigo_item → { hsPorUnidad, insumos[] }
-      ;(abRows || []).forEach(f => {
-        if (!abMap[f.codigo_item]) abMap[f.codigo_item] = { hsPorUnidad: 0, insumos: [] }
-        abMap[f.codigo_item].hsPorUnidad += f.cantidad || 0
-        abMap[f.codigo_item].insumos.push(f)
-      })
-
-      // ── 5. Hs previstas totales desde Explosión de Insumos ──
-      // Tomar items dentro del bloque MANO DE OBRA (entre fila tipo='tipo' con desc MANO DE OBRA
-      // y la siguiente fila tipo='tipo'), filtrar unidad HS o HORA
+      // ── 4. Hs previstas totales desde Explosión de Insumos ──
       const { data: expInsumos } = await supabase
         .from('explosion_insumos')
         .select('orden, tipo, descripcion, unidad, cantidad')
@@ -109,19 +88,14 @@ export default function InformeHoras({ obra }) {
 
       let hsPrevistasTot = 0
       if (expInsumos?.length) {
-        // Encontrar inicio del bloque MANO DE OBRA
         const idxMO = expInsumos.findIndex(
           f => f.tipo === 'tipo' && f.descripcion?.toUpperCase().includes('MANO DE OBRA')
         )
         if (idxMO >= 0) {
-          // Encontrar fin del bloque (próxima fila tipo='tipo' después de MO)
           const idxFin = expInsumos.findIndex(
             (f, i) => i > idxMO && f.tipo === 'tipo'
           )
-          const bloqueMO = expInsumos.slice(
-            idxMO + 1,
-            idxFin === -1 ? undefined : idxFin
-          )
+          const bloqueMO = expInsumos.slice(idxMO + 1, idxFin === -1 ? undefined : idxFin)
           hsPrevistasTot = bloqueMO
             .filter(f => f.tipo === 'item' && (f.unidad === 'HS' || f.unidad === 'HORA') && f.cantidad)
             .reduce((s, f) => s + (f.cantidad || 0), 0)
@@ -129,35 +103,31 @@ export default function InformeHoras({ obra }) {
       }
       setHsPrevistasTotales(hsPrevistasTot)
 
-      // ── 6. Construir filas del informe ──
+      // ── 5. Construir filas del informe ──
       const resultado = planItems.map(item => {
         const codigo = item.codigo
 
-        // Avance acumulado = porcentaje del último mes medido
-        const acumData = avanceAcumMap[item.id]
+        const acumData        = avanceAcumMap[item.id]
         const avanceAcumulado = acumData?.porcentaje || 0
-        const porMes = avancePorMes[item.id] || {}
-        const sinMedicion = !acumData
+        const porMes          = avancePorMes[item.id] || {}
+        const sinMedicion     = !acumData
 
-        // Buscar MO: primero Explotado, luego Abierto
-        let origen = 'ausente'
+        // MO solo desde Costo Explotado
+        let origen      = 'ausente'
         let hsPorUnidad = 0
 
         if (codigo && expMap[codigo]) {
-          origen = 'explotado'
+          origen      = 'explotado'
           hsPorUnidad = expMap[codigo].hsPorUnidad
-        } else if (codigo && abMap[codigo]) {
-          origen = 'abierto'
-          hsPorUnidad = abMap[codigo].hsPorUnidad
         }
 
         const cantidadItem = item.cantidad || 0
         const hsPrevistas  = cantidadItem * hsPorUnidad
 
-        // Hs consumidas = hsPrevistas × avance acumulado
+        // Hs consumidas = hsPrevistas × avance acumulado real
         const hsConsumidas = hsPrevistas * avanceAcumulado
 
-        // Hs consumidas por mes (cada mes tiene su porcentaje acumulado)
+        // Hs consumidas por mes
         const hsConsumidasPorMes = {}
         meses.forEach(m => {
           const pct = porMes[m] || 0
@@ -167,10 +137,10 @@ export default function InformeHoras({ obra }) {
         return {
           id: item.id,
           codigo,
-          descripcion:   item.descripcion,
-          unidad:        item.unidad,
-          cantidad:      cantidadItem,
-          precioVenta:   item.precio_venta,
+          descripcion:      item.descripcion,
+          unidad:           item.unidad,
+          cantidad:         cantidadItem,
+          precioVenta:      item.precio_venta,
           origen,
           hsPorUnidad,
           hsPrevistas,
@@ -182,7 +152,7 @@ export default function InformeHoras({ obra }) {
         }
       })
 
-      // ── 7. Resumen ──
+      // ── 6. Resumen ──
       const totalHsPrevistasItems = resultado.reduce((s, r) => s + r.hsPrevistas, 0)
       const totalHsConsumidas     = resultado.reduce((s, r) => s + r.hsConsumidas, 0)
 
@@ -191,7 +161,6 @@ export default function InformeHoras({ obra }) {
         totalHsConsumidas,
         sinDatos:    resultado.filter(r => r.origen === 'ausente').length,
         deExplotado: resultado.filter(r => r.origen === 'explotado').length,
-        deAbierto:   resultado.filter(r => r.origen === 'abierto').length,
         sinMedicion: resultado.filter(r => r.sinMedicion).length,
         total:       resultado.length,
       })
@@ -243,16 +212,15 @@ export default function InformeHoras({ obra }) {
       {/* ── Resumen cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: '10px', marginBottom: '24px' }}>
         {[
-          { label: 'Hs previstas (explosión)', value: fmtH(hsPrevistasTotales),             color: 'var(--c-text)' },
-          { label: 'Hs previstas (ítems)',      value: fmtH(resumen.totalHsPrevistasItems),  color: 'var(--c-text)' },
-          { label: 'Hs consumidas (real)',       value: fmtH(resumen.totalHsConsumidas),      color: 'var(--c-gold)' },
+          { label: 'Hs previstas (explosión)', value: fmtH(hsPrevistasTotales),            color: 'var(--c-text)' },
+          { label: 'Hs previstas (ítems)',      value: fmtH(resumen.totalHsPrevistasItems), color: 'var(--c-text)' },
+          { label: 'Hs consumidas (real)',       value: fmtH(resumen.totalHsConsumidas),     color: 'var(--c-gold)' },
           { label: '% ejecutado MO',
             value: resumen.totalHsPrevistasItems > 0
               ? (resumen.totalHsConsumidas / resumen.totalHsPrevistasItems * 100).toFixed(1) + '%'
               : '—',
             color: 'var(--c-success)' },
-          { label: 'De Costo Explotado',  value: resumen.deExplotado + ' ítems', color: '#1d4ed8' },
-          { label: 'De Costo Abierto',    value: resumen.deAbierto   + ' ítems', color: '#15803d' },
+          { label: 'De Costo Explotado', value: resumen.deExplotado + ' ítems', color: '#1d4ed8' },
           { label: 'Sin datos MO',
             value: resumen.sinDatos + ' ítems',
             color: resumen.sinDatos > 0 ? 'var(--c-danger)' : 'var(--c-text3)' },
@@ -270,15 +238,14 @@ export default function InformeHoras({ obra }) {
         {[
           { k: 'todos',     l: 'Todos' },
           { k: 'explotado', l: 'Explotado' },
-          { k: 'abierto',   l: 'Abierto' },
           { k: 'ausente',   l: 'Sin datos' },
         ].map(o => (
           <button key={o.k} onClick={() => setFiltroOrigen(o.k)} style={{
             padding: '4px 12px', fontSize: '11px', fontWeight: '500', borderRadius: '20px',
             border: '1px solid', cursor: 'pointer',
             background: filtroOrigen === o.k ? 'var(--c-gold)' : 'white',
-            color:      filtroOrigen === o.k ? 'white' : 'var(--c-text2)',
-            borderColor:filtroOrigen === o.k ? 'var(--c-gold)' : 'var(--c-border)',
+            color:       filtroOrigen === o.k ? 'white' : 'var(--c-text2)',
+            borderColor: filtroOrigen === o.k ? 'var(--c-gold)' : 'var(--c-border)',
           }}>{o.l}</button>
         ))}
 
@@ -288,15 +255,15 @@ export default function InformeHoras({ obra }) {
         <button onClick={() => setFiltroMes('todos')} style={{
           padding: '4px 12px', fontSize: '11px', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
           background: filtroMes === 'todos' ? 'var(--c-gold)' : 'white',
-          color:      filtroMes === 'todos' ? 'white' : 'var(--c-text2)',
-          borderColor:filtroMes === 'todos' ? 'var(--c-gold)' : 'var(--c-border)',
+          color:       filtroMes === 'todos' ? 'white' : 'var(--c-text2)',
+          borderColor: filtroMes === 'todos' ? 'var(--c-gold)' : 'var(--c-border)',
         }}>Acumulado</button>
         {mesesDisponibles.map(m => (
           <button key={m} onClick={() => setFiltroMes(String(m))} style={{
             padding: '4px 12px', fontSize: '11px', borderRadius: '20px', border: '1px solid', cursor: 'pointer',
             background: filtroMes === String(m) ? 'var(--c-gold)' : 'white',
-            color:      filtroMes === String(m) ? 'white' : 'var(--c-text2)',
-            borderColor:filtroMes === String(m) ? 'var(--c-gold)' : 'var(--c-border)',
+            color:       filtroMes === String(m) ? 'white' : 'var(--c-text2)',
+            borderColor: filtroMes === String(m) ? 'var(--c-gold)' : 'var(--c-border)',
           }}>Mes {String(m).padStart(2, '0')}</button>
         ))}
       </div>
@@ -376,8 +343,8 @@ export default function InformeHoras({ obra }) {
       {/* Aviso ítems sin datos */}
       {resumen.sinDatos > 0 && (
         <div style={{ marginTop: '16px', padding: '12px 16px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', fontSize: '12px', color: '#92400e' }}>
-          <b>{resumen.sinDatos} ítem{resumen.sinDatos > 1 ? 's' : ''}</b> no tiene{resumen.sinDatos > 1 ? 'n' : ''} datos de mano de obra en Costo Explotado ni en Costo Abierto.
-          Revisá que los códigos coincidan entre las tres tablas.
+          <b>{resumen.sinDatos} ítem{resumen.sinDatos > 1 ? 's' : ''}</b> no tiene{resumen.sinDatos > 1 ? 'n' : ''} datos de mano de obra en Costo Explotado.
+          Revisá que los códigos coincidan entre las tablas.
         </div>
       )}
     </div>

@@ -74,6 +74,7 @@ export default function InformeHoras({ obra }) {
         .eq('tipo', 'insumo')
         .ilike('categoria', 'MANO DE OBRA%')
       if (e3) throw new Error('costo_explotado: ' + e3.message)
+        console.log('[moRows]', moRows?.length, moRows?.filter(r => r.codigo_item === '0.1'))
 
       // Map: codigo_item → { totalHs, detalle: [{ descripcion, cantidad }] }
       // totalHs = suma de cantidad de todos los insumos MO del ítem

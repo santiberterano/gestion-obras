@@ -32,6 +32,7 @@ export default function InformeHoras({ obra }) {
         .select('id, codigo, descripcion, unidad, cantidad')
         .eq('obra_id', obra.id)
         .eq('tipo', 'item')
+        .neq('unidad', 'GL')          // GL = globales/subcontratos, cantidad no es unidad física
         .order('orden', { ascending: true })
       if (e1) throw new Error('planilla_items: ' + e1.message)
       if (!planItems?.length) { setFilas([]); setLoading(false); return }

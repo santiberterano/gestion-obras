@@ -72,7 +72,7 @@ export default function InformeHoras({ obra }) {
         .select('codigo_item, descripcion, cantidad')
         .eq('obra_id', obra.id)
         .eq('tipo', 'insumo')
-        .eq('categoria', 'MANO DE OBRA')
+        .ilike('categoria', 'MANO DE OBRA%')
       if (e3) throw new Error('costo_explotado: ' + e3.message)
 
       // Map: codigo_item → { totalHs, detalle: [{ descripcion, cantidad }] }
@@ -83,6 +83,9 @@ export default function InformeHoras({ obra }) {
         moMap[r.codigo_item].totalHs += r.cantidad || 0
         moMap[r.codigo_item].detalle.push({ descripcion: r.descripcion, cantidad: r.cantidad || 0 })
       })
+
+      console.log('[InformeHoras] moMap keys:', Object.keys(moMap))
+      console.log('[InformeHoras] planilla codigos:', planItems.map(i => i.codigo))
 
       // ── 4. Construir filas ────────────────────────────────────────────────
       const resultado = planItems.map(item => {

@@ -9,7 +9,7 @@ import Obra from './components/Obra'
 import './App.css'
 
 function App() {
-  const [session, setSession] = useState(null)
+  const [session, setSession] = useState(undefined) // undefined = todavía cargando
   const [perfil, setPerfil]   = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -20,35 +20,45 @@ function App() {
       else setLoading(false)
     })
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session) cargarPerfil(session.user.id)
       else { setPerfil(null); setLoading(false) }
     })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   async function cargarPerfil(userId) {
+    setLoading(true)
     const { data } = await supabase
       .from('perfiles').select('*').eq('id', userId).single()
     setPerfil(data)
     setLoading(false)
   }
 
+  // Todavía resolviendo sesión inicial
+  if (session === undefined) return null
+
+  // Sin sesión → Login
   if (!session) return <Login />
-  if (loading)  return <p style={{ padding: 24, color: '#999' }}>Cargando...</p>
 
-  // Jefe de obra → su listado de obras. Todos los demás → admin
-  const inicio = perfil?.area === 'jefe_obra' ? '/dashboard' : '/admin'
+  // Con sesión pero sin perfil cargado
+  if (loading || !perfil) return <p style={{ padding: 24, color: '#999' }}>Cargando...</p>
 
+  const inicio = perfil.area === 'jefe_obra' ? '/dashboard' : '/admin'
+
+  // key={session.user.id} fuerza remount completo del router al cambiar de usuario
+  // esto elimina el bug de redirección al loguear un usuario distinto
   return (
-    <BrowserRouter>
+    <BrowserRouter key={session.user.id}>
       <Routes>
-        <Route path="/"            element={<Navigate to={inicio} replace />} />
-        <Route path="/dashboard"   element={<Dashboard perfil={perfil} />} />
-        <Route path="/admin"       element={<AdminDashboard perfil={perfil} />} />
-        <Route path="/nueva-obra"  element={<NuevaObra />} />
-        <Route path="/obras/:id"   element={<Obra perfil={perfil} />} />
-        <Route path="*"            element={<Navigate to={inicio} replace />} />
+        <Route path="/"           element={<Navigate to={inicio} replace />} />
+        <Route path="/dashboard"  element={<Dashboard perfil={perfil} />} />
+        <Route path="/admin"      element={<AdminDashboard perfil={perfil} />} />
+        <Route path="/nueva-obra" element={<NuevaObra />} />
+        <Route path="/obras/:id"  element={<Obra perfil={perfil} />} />
+        <Route path="*"           element={<Navigate to={inicio} replace />} />
       </Routes>
     </BrowserRouter>
   )

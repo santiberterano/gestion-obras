@@ -14,14 +14,12 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Carga inicial de sesión
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) cargarPerfil(session.user.id)
       else setLoading(false)
     })
 
-    // Solo reaccionar a login/logout reales — ignorar TOKEN_REFRESHED y similares
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setSession(null); setPerfil(null); setLoading(false)
@@ -29,7 +27,7 @@ function App() {
         setSession(session)
         if (session) cargarPerfil(session.user.id)
       }
-      // TOKEN_REFRESHED, USER_UPDATED → ignorar, no tocar el estado
+      // TOKEN_REFRESHED y otros → ignorar
     })
 
     return () => subscription.unsubscribe()
@@ -45,6 +43,7 @@ function App() {
   if (!session) return <Login />
   if (loading)  return <p style={{ padding: 24, color: '#999' }}>Cargando...</p>
 
+  // jefe_obra → /dashboard | todos los demás → /admin
   const inicio = perfil?.area === 'jefe_obra' ? '/dashboard' : '/admin'
 
   return (

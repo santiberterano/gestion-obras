@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
@@ -9,63 +9,53 @@ import Obra from './components/Obra'
 import './App.css'
 
 function App() {
-  const [session, setSession] = useState(undefined) // undefined = todavía cargando
+  const [session, setSession] = useState(null)
   const [perfil, setPerfil]   = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setSession(session)
-    if (session) cargarPerfil(session.user.id)
-    else setLoading(false)
-  })
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT') {
-      setSession(null); setPerfil(null); setLoading(false)
-    }
-    if (event === 'TOKEN_REFRESHED') return
-    if (event === 'SIGNED_IN' && session) {
+    // Carga inicial de sesión
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      cargarPerfil(session.user.id)
-    }
-  })
+      if (session) cargarPerfil(session.user.id)
+      else setLoading(false)
+    })
 
-  return () => subscription.unsubscribe()
-}, [])
+    // Solo reaccionar a login/logout reales — ignorar TOKEN_REFRESHED y similares
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null); setPerfil(null); setLoading(false)
+      } else if (event === 'SIGNED_IN') {
+        setSession(session)
+        if (session) cargarPerfil(session.user.id)
+      }
+      // TOKEN_REFRESHED, USER_UPDATED → ignorar, no tocar el estado
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   async function cargarPerfil(userId) {
-    setLoading(true)
     const { data } = await supabase
       .from('perfiles').select('*').eq('id', userId).single()
     setPerfil(data)
     setLoading(false)
   }
 
-  // Todavía resolviendo sesión inicial
-  if (session === undefined) return null
-
-  // Sin sesión → Login
   if (!session) return <Login />
+  if (loading)  return <p style={{ padding: 24, color: '#999' }}>Cargando...</p>
 
-  // Con sesión pero sin perfil cargado
-  if (loading || !perfil) return <p style={{ padding: 24, color: '#999' }}>Cargando...</p>
+  const inicio = perfil?.area === 'jefe_obra' ? '/dashboard' : '/admin'
 
-  const inicio = perfil.area === 'jefe_obra' ? '/dashboard' : '/admin'
-
-  // key={session.user.id} fuerza remount completo del router al cambiar de usuario
-  // esto elimina el bug de redirección al loguear un usuario distinto
   return (
-    <BrowserRouter key={session.user.id}>
-      <Routes>
-        <Route path="/"           element={<Navigate to={inicio} replace />} />
-        <Route path="/dashboard"  element={<Dashboard perfil={perfil} />} />
-        <Route path="/admin"      element={<AdminDashboard perfil={perfil} />} />
-        <Route path="/nueva-obra" element={<NuevaObra />} />
-        <Route path="/obras/:id"  element={<Obra perfil={perfil} />} />
-        <Route path="*"           element={<Navigate to={inicio} replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/"           element={<Navigate to={inicio} replace />} />
+      <Route path="/dashboard"  element={<Dashboard perfil={perfil} />} />
+      <Route path="/admin"      element={<AdminDashboard perfil={perfil} />} />
+      <Route path="/nueva-obra" element={<NuevaObra />} />
+      <Route path="/obras/:id"  element={<Obra perfil={perfil} />} />
+      <Route path="*"           element={<Navigate to={inicio} replace />} />
+    </Routes>
   )
 }
 

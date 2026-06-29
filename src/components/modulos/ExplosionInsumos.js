@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../supabaseClient'
 

@@ -24,11 +24,11 @@ function App() {
     if (event === 'SIGNED_OUT') {
       setSession(null); setPerfil(null); setLoading(false)
     }
-    if (event === 'SIGNED_IN') {
+    if (event === 'TOKEN_REFRESHED') return
+    if (event === 'SIGNED_IN' && session) {
       setSession(session)
-      if (session) cargarPerfil(session.user.id)
+      cargarPerfil(session.user.id)
     }
-    // TOKEN_REFRESHED, USER_UPDATED y otros → ignorar
   })
 
   return () => subscription.unsubscribe()

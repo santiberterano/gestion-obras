@@ -14,20 +14,25 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setSession(session)
+    if (session) cargarPerfil(session.user.id)
+    else setLoading(false)
+  })
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      setSession(null); setPerfil(null); setLoading(false)
+    }
+    if (event === 'SIGNED_IN') {
       setSession(session)
       if (session) cargarPerfil(session.user.id)
-      else setLoading(false)
-    })
+    }
+    // TOKEN_REFRESHED, USER_UPDATED y otros → ignorar
+  })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      if (session) cargarPerfil(session.user.id)
-      else { setPerfil(null); setLoading(false) }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
+  return () => subscription.unsubscribe()
+}, [])
 
   async function cargarPerfil(userId) {
     setLoading(true)

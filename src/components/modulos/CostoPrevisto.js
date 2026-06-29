@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+﻿import React, { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../supabaseClient'
 
@@ -343,59 +343,59 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
   const totalFinal = filaTotal?.total || null
   const grupos     = agrupar(filas)
 
-  if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
+  if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--c-text3)' }}>Cargando...</div>
 
   return (
     <div>
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0' }}>
         <button onClick={() => setSeccion('ver')}
-          style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'ver' ? '2px solid #2563eb' : '2px solid transparent', color: seccion === 'ver' ? '#2563eb' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
+          style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'ver' ? '2px solid var(--c-gold)' : '2px solid transparent', color: seccion === 'ver' ? 'var(--c-gold)' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
           Ver Costo Previsto
         </button>
         {esAdmin && filas.length > 0 && (
           <button onClick={() => { setSeccion('wizard'); cargarConfigPlanilla() }}
-            style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'wizard' ? '2px solid #2563eb' : '2px solid transparent', color: seccion === 'wizard' ? '#2563eb' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
+            style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: seccion === 'wizard' ? '2px solid var(--c-gold)' : '2px solid transparent', color: seccion === 'wizard' ? 'var(--c-gold)' : '#666', fontWeight: '600', fontSize: '14px', cursor: 'pointer', marginBottom: '-2px' }}>
             Generar Planilla de Cotización
           </button>
         )}
       </div>
 
-      {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
-      {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
+      {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: 'var(--c-danger)', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
+      {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: 'var(--c-success)', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
 
       {/* ===== VER ===== */}
       {seccion === 'ver' && (
         <>
           {meta && (
-            <div style={{ marginBottom: '20px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: '#555' }}>
-              {meta.proyecto    && <span><b style={{ color: '#999' }}>Proyecto:</b> {meta.proyecto}</span>}
-              {meta.nombre_obra && <span><b style={{ color: '#999' }}>Obra:</b> {meta.nombre_obra}</span>}
-              {meta.fecha       && <span><b style={{ color: '#999' }}>Fecha:</b> {meta.fecha}</span>}
-              {totalFinal && <span style={{ marginLeft: 'auto', fontWeight: '700', fontSize: '15px', color: '#2563eb' }}>Total: ${Number(totalFinal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
+            <div style={{ marginBottom: '20px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--c-text2)' }}>
+              {meta.proyecto    && <span><b style={{ color: 'var(--c-text3)' }}>Proyecto:</b> {meta.proyecto}</span>}
+              {meta.nombre_obra && <span><b style={{ color: 'var(--c-text3)' }}>Obra:</b> {meta.nombre_obra}</span>}
+              {meta.fecha       && <span><b style={{ color: 'var(--c-text3)' }}>Fecha:</b> {meta.fecha}</span>}
+              {totalFinal && <span style={{ marginLeft: 'auto', fontWeight: '700', fontSize: '15px', color: 'var(--c-gold)' }}>Total: ${Number(totalFinal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
             </div>
           )}
           {esAdmin && (
-            <div style={{ marginBottom: '20px', padding: '16px 20px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ marginBottom: '20px', padding: '16px 20px', background: 'var(--c-surface2)', border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '200px' }}>
                 <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '2px' }}>{filas.length > 0 ? '🔄 Reemplazar Excel' : '📤 Subir Excel de Costo Previsto'}</div>
-                <div style={{ fontSize: '12px', color: '#888' }}>Solo archivos .xlsx</div>
+                <div style={{ fontSize: '12px', color: 'var(--c-text3)' }}>Solo archivos .xlsx</div>
               </div>
               <input ref={inputRef} type="file" accept=".xlsx" onChange={handleArchivo} style={{ display: 'none' }} id="upload-cp" />
-              <label htmlFor="upload-cp" style={{ padding: '8px 20px', background: '#2563eb', color: 'white', borderRadius: '6px', cursor: subiendo ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px', opacity: subiendo ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+              <label htmlFor="upload-cp" style={{ padding: '8px 20px', background: 'var(--c-gold)', color: 'white', borderRadius: '6px', cursor: subiendo ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px', opacity: subiendo ? 0.6 : 1, whiteSpace: 'nowrap' }}>
                 {subiendo ? 'Procesando...' : 'Elegir archivo'}
               </label>
             </div>
           )}
           {filas.length === 0 ? (
-            <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--c-text3)', fontSize: '15px' }}>
               {esAdmin ? 'Subí el Excel para ver el costo previsto.' : 'Aún no se cargó el costo previsto para esta obra.'}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                  <tr style={{ background: 'var(--c-text)', color: 'white' }}>
                     {['Código', 'Descripción', 'Unid.', 'P. Unitario', 'Cantidad', 'Total', 'Incidencia'].map(h => (
                       <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Descripción' ? 'left' : 'right', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '12px' }}>{h}</th>
                     ))}
@@ -405,29 +405,29 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                   {grupos.map((g, gi) => (
                     <React.Fragment key={gi}>
                       {g.rubro && (
-                        <tr style={{ background: '#dbeafe' }}>
-                          <td colSpan={7} style={{ padding: '8px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '13px' }}>{g.rubro.descripcion}</td>
+                        <tr style={{ background: 'var(--c-gold-dim)' }}>
+                          <td colSpan={7} style={{ padding: '8px 12px', fontWeight: '700', color: 'var(--c-text)', fontSize: '13px' }}>{g.rubro.descripcion}</td>
                         </tr>
                       )}
                       {g.items.map((f, fi) => {
                         const esSubtotal = f.tipo === 'subtotal'
                         const esTitulo   = f.tipo === 'titulo'
                         return (
-                          <tr key={fi} style={{ background: esSubtotal ? '#f1f5f9' : esTitulo ? '#f8fafc' : fi % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: esSubtotal ? '2px solid #cbd5e1' : '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '7px 12px', color: '#666', whiteSpace: 'nowrap' }}>{esSubtotal ? '' : f.codigo || ''}</td>
-                            <td style={{ padding: '7px 12px', fontWeight: (esSubtotal || esTitulo) ? '700' : '400', color: esTitulo ? '#1e3a5f' : 'inherit' }}>{esSubtotal ? 'SUBTOTAL' : f.descripcion || ''}</td>
-                            <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{(esSubtotal || esTitulo) ? '' : f.unidad || ''}</td>
+                          <tr key={fi} style={{ background: esSubtotal ? 'var(--c-border)' : esTitulo ? 'var(--c-surface2)' : fi % 2 === 0 ? '#ffffff' : 'var(--c-surface2)', borderBottom: esSubtotal ? '2px solid #cbd5e1' : '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '7px 12px', color: 'var(--c-text2)', whiteSpace: 'nowrap' }}>{esSubtotal ? '' : f.codigo || ''}</td>
+                            <td style={{ padding: '7px 12px', fontWeight: (esSubtotal || esTitulo) ? '700' : '400', color: esTitulo ? 'var(--c-text)' : 'inherit' }}>{esSubtotal ? 'SUBTOTAL' : f.descripcion || ''}</td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--c-text3)' }}>{(esSubtotal || esTitulo) ? '' : f.unidad || ''}</td>
                             <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(esSubtotal || esTitulo) ? '' : fmt(f.precio_unitario)}</td>
                             <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(esSubtotal || esTitulo) ? '' : fmt(f.cantidad)}</td>
-                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: esSubtotal ? '700' : '400', color: esSubtotal ? '#1e3a5f' : '#111' }}>{esTitulo ? '' : fmt(f.total)}</td>
-                            <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{(esSubtotal || esTitulo) ? '' : fmtPct(f.incidencia)}</td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: esSubtotal ? '700' : '400', color: esSubtotal ? 'var(--c-text)' : '#111' }}>{esTitulo ? '' : fmt(f.total)}</td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--c-text3)' }}>{(esSubtotal || esTitulo) ? '' : fmtPct(f.incidencia)}</td>
                           </tr>
                         )
                       })}
                     </React.Fragment>
                   ))}
                   {totalFinal && (
-                    <tr style={{ background: '#1e3a5f' }}>
+                    <tr style={{ background: 'var(--c-text)' }}>
                       <td colSpan={5} style={{ padding: '12px', fontWeight: '700', color: 'white', fontSize: '14px' }}>TOTAL COSTO PREVISTO</td>
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'white', fontSize: '15px' }}>${Number(totalFinal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
                       <td />
@@ -444,7 +444,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
       {seccion === 'wizard' && (
         <div>
           {cargandoConfig ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando configuración...</div>
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--c-text3)' }}>Cargando configuración...</div>
           ) : (
             <>
               {/* Stepper */}
@@ -452,10 +452,10 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                 {[{ n: 1, label: 'Gastos Indirectos' }, { n: 2, label: 'Coeficiente y Duración' }, { n: 3, label: 'Ver y Descargar' }].map((paso, i) => (
                   <div key={paso.n} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: pasoWizard >= paso.n ? '#2563eb' : '#e2e8f0', color: pasoWizard >= paso.n ? 'white' : '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px' }}>{paso.n}</div>
-                      <div style={{ fontSize: '11px', color: pasoWizard >= paso.n ? '#2563eb' : '#aaa', marginTop: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>{paso.label}</div>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: pasoWizard >= paso.n ? 'var(--c-gold)' : 'var(--c-border)', color: pasoWizard >= paso.n ? 'white' : '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px' }}>{paso.n}</div>
+                      <div style={{ fontSize: '11px', color: pasoWizard >= paso.n ? 'var(--c-gold)' : '#aaa', marginTop: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>{paso.label}</div>
                     </div>
-                    {i < 2 && <div style={{ height: '2px', flex: 1, background: pasoWizard > paso.n ? '#2563eb' : '#e2e8f0', marginBottom: '20px' }} />}
+                    {i < 2 && <div style={{ height: '2px', flex: 1, background: pasoWizard > paso.n ? 'var(--c-gold)' : 'var(--c-border)', marginBottom: '20px' }} />}
                   </div>
                 ))}
               </div>
@@ -463,12 +463,12 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
               {/* Paso 1 */}
               {pasoWizard === 1 && (
                 <div>
-                  <h4 style={{ color: '#1e3a5f', marginBottom: '8px' }}>Paso 1 — Marcá los ítems que son gastos indirectos</h4>
-                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>Estos ítems no aparecerán en la planilla de medición. Su costo se redistribuirá proporcionalmente entre los demás ítems.</p>
+                  <h4 style={{ color: 'var(--c-text)', marginBottom: '8px' }}>Paso 1 — Marcá los ítems que son gastos indirectos</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--c-text2)', marginBottom: '16px' }}>Estos ítems no aparecerán en la planilla de medición. Su costo se redistribuirá proporcionalmente entre los demás ítems.</p>
                   <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
-                        <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                        <tr style={{ background: 'var(--c-text)', color: 'white' }}>
                           <th style={{ padding: '8px 12px', width: '40px' }}>Indirecto</th>
                           <th style={{ padding: '8px 12px', textAlign: 'left' }}>Código</th>
                           <th style={{ padding: '8px 12px', textAlign: 'left' }}>Descripción</th>
@@ -479,25 +479,25 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                         {grupos.map((g, gi) => (
                           <React.Fragment key={gi}>
                             {g.rubro && (
-                              <tr style={{ background: '#dbeafe' }}>
+                              <tr style={{ background: 'var(--c-gold-dim)' }}>
                                 <td />
-                                <td colSpan={3} style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{g.rubro.descripcion}</td>
+                                <td colSpan={3} style={{ padding: '7px 12px', fontWeight: '700', color: 'var(--c-text)' }}>{g.rubro.descripcion}</td>
                               </tr>
                             )}
                             {g.items.filter(f => f.tipo === 'titulo' || (f.tipo === 'item' && f.total)).map((f, fi) => (
                               f.tipo === 'titulo' ? (
-                                <tr key={fi} style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                <tr key={fi} style={{ background: 'var(--c-surface2)', borderBottom: '1px solid #e2e8f0' }}>
                                   <td />
-                                  <td style={{ padding: '7px 12px', color: '#1e3a5f', fontWeight: '700', fontSize: '12px' }}>{f.codigo}</td>
-                                  <td style={{ padding: '7px 12px', fontWeight: '700', color: '#1e3a5f' }}>{f.descripcion}</td>
+                                  <td style={{ padding: '7px 12px', color: 'var(--c-text)', fontWeight: '700', fontSize: '12px' }}>{f.codigo}</td>
+                                  <td style={{ padding: '7px 12px', fontWeight: '700', color: 'var(--c-text)' }}>{f.descripcion}</td>
                                   <td />
                                 </tr>
                               ) : (
-                                <tr key={fi} style={{ background: indirectos[f.id] ? '#fef9c3' : fi % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                <tr key={fi} style={{ background: indirectos[f.id] ? '#fef9c3' : fi % 2 === 0 ? 'white' : 'var(--c-surface2)', borderBottom: '1px solid #f1f5f9' }}>
                                   <td style={{ padding: '7px 12px', textAlign: 'center' }}>
                                     <input type="checkbox" checked={!!indirectos[f.id]} onChange={() => toggleIndirecto(f.id)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
                                   </td>
-                                  <td style={{ padding: '7px 12px', color: '#666' }}>{f.codigo}</td>
+                                  <td style={{ padding: '7px 12px', color: 'var(--c-text2)' }}>{f.codigo}</td>
                                   <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
                                   <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600' }}>${fmt(f.total)}</td>
                                 </tr>
@@ -509,8 +509,8 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                     </table>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '13px', color: '#666' }}>{Object.values(indirectos).filter(Boolean).length} ítems marcados como indirectos</div>
-                    <button onClick={() => setPasoWizard(2)} style={{ padding: '8px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--c-text2)' }}>{Object.values(indirectos).filter(Boolean).length} ítems marcados como indirectos</div>
+                    <button onClick={() => setPasoWizard(2)} style={{ padding: '8px 24px', background: 'var(--c-gold)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
                       Siguiente →
                     </button>
                   </div>
@@ -520,16 +520,16 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
               {/* Paso 2 */}
               {pasoWizard === 2 && (
                 <div>
-                  <h4 style={{ color: '#1e3a5f', marginBottom: '8px' }}>Paso 2 — Coeficiente de pase y duración</h4>
-                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>El coeficiente multiplica el costo ajustado para obtener el precio de venta.</p>
+                  <h4 style={{ color: 'var(--c-text)', marginBottom: '8px' }}>Paso 2 — Coeficiente de pase y duración</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--c-text2)', marginBottom: '20px' }}>El coeficiente multiplica el costo ajustado para obtener el precio de venta.</p>
                   <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
                     <div>
-                      <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Coeficiente de pase</label>
+                      <label style={{ fontSize: '13px', color: 'var(--c-text2)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Coeficiente de pase</label>
                       <input type="number" min="1" step="0.01" value={coeficiente} onChange={ev => setCoeficiente(ev.target.value)} placeholder="ej: 1.35"
                         style={{ width: '150px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px' }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Duración de la obra (meses)</label>
+                      <label style={{ fontSize: '13px', color: 'var(--c-text2)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>Duración de la obra (meses)</label>
                       <input type="number" min="1" max="60" value={duracionMeses} onChange={ev => setDuracionMeses(ev.target.value)} placeholder="ej: 12"
                         style={{ width: '150px', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px' }} />
                     </div>
@@ -537,16 +537,16 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
 
                   {coeficiente && parseFloat(coeficiente) > 0 && (
                     <div style={{ marginBottom: '20px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e3a5f', marginBottom: '8px' }}>Preview de precios de venta</div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--c-text)', marginBottom: '8px' }}>Preview de precios de venta</div>
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                           <thead>
-                            <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                            <tr style={{ background: 'var(--c-text)', color: 'white' }}>
                               <th style={{ padding: '8px 12px', textAlign: 'left' }}>Descripción</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>Costo Original</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>Indirectos</th>
                               <th style={{ padding: '8px 12px', textAlign: 'right' }}>Costo Ajustado</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'right', background: '#1a5c3a' }}>Precio Venta</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'right', background: '#0f5132' }}>Precio Venta</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -564,28 +564,28 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                                   if (!tieneItems) continue
                                   const totalTitulo = sub.reduce((s, f) => s + (planillaCalcMap[f.id]?.precio_venta || 0), 0)
                                   rows.push(
-                                    <tr key={'t-'+fila.id} style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                      <td style={{ padding: '6px 12px', fontWeight: '700', color: '#1e3a5f' }}>{fila.descripcion}</td>
+                                    <tr key={'t-'+fila.id} style={{ background: 'var(--c-surface2)', borderBottom: '1px solid #e2e8f0' }}>
+                                      <td style={{ padding: '6px 12px', fontWeight: '700', color: 'var(--c-text)' }}>{fila.descripcion}</td>
                                       <td /><td /><td />
-                                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>${fmt(totalTitulo)}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: 'var(--c-text)' }}>${fmt(totalTitulo)}</td>
                                     </tr>
                                   )
                                 } else if (fila.tipo === 'item' && planillaCalcMap[fila.id]) {
                                   const f = planillaCalcMap[fila.id]
                                   rows.push(
-                                    <tr key={'i-'+fila.id} style={{ background: rows.length % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                                    <tr key={'i-'+fila.id} style={{ background: rows.length % 2 === 0 ? 'white' : 'var(--c-surface2)', borderBottom: '1px solid #f1f5f9' }}>
                                       <td style={{ padding: '6px 12px' }}>{f.descripcion}</td>
                                       <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.total)}</td>
                                       <td style={{ padding: '6px 12px', textAlign: 'right', color: '#ca8a04' }}>${fmt(f.indirectos_absorbidos)}</td>
                                       <td style={{ padding: '6px 12px', textAlign: 'right' }}>${fmt(f.costo_ajustado)}</td>
-                                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: '#16a34a' }}>${fmt(f.precio_venta)}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: '700', color: 'var(--c-success)' }}>${fmt(f.precio_venta)}</td>
                                     </tr>
                                   )
                                 }
                               }
                               return rows
                             })()}
-                            <tr style={{ background: '#1e3a5f' }}>
+                            <tr style={{ background: 'var(--c-text)' }}>
                               <td style={{ padding: '8px 12px', fontWeight: '700', color: 'white' }}>TOTAL</td>
                               <td style={{ padding: '8px 12px', textAlign: 'right', color: 'white', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.total,0))}</td>
                               <td style={{ padding: '8px 12px', textAlign: 'right', color: '#fde68a', fontWeight: '700' }}>${fmt(calcularPlanilla().reduce((s,f) => s+f.indirectos_absorbidos,0))}</td>
@@ -599,9 +599,9 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                   )}
 
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between' }}>
-                    <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#555' }}>← Anterior</button>
+                    <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 20px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: 'var(--c-text2)' }}>← Anterior</button>
                     <button onClick={guardarYGenerarPlanilla} disabled={guardandoPlanilla || !coeficiente || !duracionMeses}
-                      style={{ padding: '8px 24px', background: !coeficiente || !duracionMeses ? '#94a3b8' : '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: !coeficiente || !duracionMeses ? 'not-allowed' : 'pointer' }}>
+                      style={{ padding: '8px 24px', background: !coeficiente || !duracionMeses ? 'var(--c-border2)' : 'var(--c-success)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: !coeficiente || !duracionMeses ? 'not-allowed' : 'pointer' }}>
                       {guardandoPlanilla ? 'Generando...' : 'Generar Planilla →'}
                     </button>
                   </div>
@@ -612,18 +612,18 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
               {pasoWizard === 3 && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-                    <h4 style={{ color: '#1e3a5f', margin: 0 }}>Planilla de Cotización generada</h4>
+                    <h4 style={{ color: 'var(--c-text)', margin: 0 }}>Planilla de Cotización generada</h4>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', color: '#555' }}>
+                      <button onClick={() => setPasoWizard(1)} style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer', color: 'var(--c-text2)' }}>
                         ✏️ Modificar
                       </button>
                       <button onClick={descargarExcel} disabled={planillaGenerada.length === 0}
-                        style={{ padding: '8px 20px', background: planillaGenerada.length > 0 ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: planillaGenerada.length > 0 ? 'pointer' : 'not-allowed' }}>
+                        style={{ padding: '8px 20px', background: planillaGenerada.length > 0 ? 'var(--c-gold)' : 'var(--c-border2)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: planillaGenerada.length > 0 ? 'pointer' : 'not-allowed' }}>
                         ⬇ Descargar Excel
                       </button>
                       {onIrAPlanilla && (
                         <button onClick={onIrAPlanilla}
-                          style={{ padding: '8px 20px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+                          style={{ padding: '8px 20px', background: 'var(--c-success)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
                           Ver Planilla de Medición →
                         </button>
                       )}
@@ -631,12 +631,12 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                   </div>
 
                   {planillaGenerada.length === 0 ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#aaa' }}>No hay datos generados todavía.</div>
+                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--c-text3)' }}>No hay datos generados todavía.</div>
                   ) : (
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
-                          <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                          <tr style={{ background: 'var(--c-text)', color: 'white' }}>
                             <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '600' }}>Descripción</th>
                             <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Unid.</th>
                             <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>Cantidad</th>
@@ -646,12 +646,12 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                         </thead>
                         <tbody>
                           {planillaGenerada.map((f, i) => (
-                            <tr key={i} style={{ background: f.tipo === 'rubro' ? '#dbeafe' : f.tipo === 'titulo' ? '#f8fafc' : i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: f.tipo === 'titulo' ? '1px solid #e2e8f0' : '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '7px 12px', fontWeight: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '700' : '400', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '#1e3a5f' : 'inherit' }}>{f.descripcion}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : f.unidad || ''}</td>
+                            <tr key={i} style={{ background: f.tipo === 'rubro' ? 'var(--c-gold-dim)' : f.tipo === 'titulo' ? 'var(--c-surface2)' : i % 2 === 0 ? 'white' : 'var(--c-surface2)', borderBottom: f.tipo === 'titulo' ? '1px solid #e2e8f0' : '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '7px 12px', fontWeight: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '700' : '400', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? 'var(--c-text)' : 'inherit' }}>{f.descripcion}</td>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--c-text3)' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : f.unidad || ''}</td>
                               <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : fmt(f.cantidad)}</td>
                               <td style={{ padding: '7px 12px', textAlign: 'right' }}>{(f.tipo === 'rubro' || f.tipo === 'titulo') ? '' : (f.cantidad ? fmt(f.precio_venta / f.cantidad) : '-')}</td>
-                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? '#1e3a5f' : '#111' }}>
+                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: (f.tipo === 'rubro' || f.tipo === 'titulo') ? 'var(--c-text)' : '#111' }}>
                                 {f.tipo === 'titulo'
                                   ? (() => {
                                       const idxT = planillaGenerada.indexOf(f)
@@ -677,7 +677,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                               </td>
                             </tr>
                           ))}
-                          <tr style={{ background: '#1e3a5f' }}>
+                          <tr style={{ background: 'var(--c-text)' }}>
                             <td colSpan={4} style={{ padding: '12px', fontWeight: '700', color: 'white', fontSize: '14px' }}>TOTAL PRECIO DE VENTA</td>
                             <td style={{ padding: '12px', textAlign: 'right', fontWeight: '700', color: 'white', fontSize: '15px' }}>${fmt(planillaGenerada.filter(f => f.tipo === 'item').reduce((s,f) => s + (f.precio_venta||0), 0))}</td>
                           </tr>
@@ -686,7 +686,7 @@ function CostoPrevisto({ obra, perfil, onIrAPlanilla }) {
                     </div>
                   )}
 
-                  <div style={{ marginTop: '16px', padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '13px', color: '#16a34a' }}>
+                  <div style={{ marginTop: '16px', padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '13px', color: 'var(--c-success)' }}>
                     ✓ La planilla de cotización fue guardada. Usá el botón de arriba para ir a la Planilla de Medición.
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+﻿import React, { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../supabaseClient'
 
@@ -346,38 +346,38 @@ function ExplosionInsumos({ obra, perfil }) {
 
   const estadoColor = {
     pendiente:          { bg: '#fef9c3', color: '#ca8a04' },
-    aprobada:           { bg: '#dbeafe', color: '#2563eb' },
+    aprobada:           { bg: 'var(--c-gold-dim)', color: 'var(--c-gold)' },
     'entrega parcial':  { bg: '#fef3c7', color: '#d97706' },
-    entregada:          { bg: '#dcfce7', color: '#16a34a' },
-    rechazada:          { bg: '#fee2e2', color: '#dc2626' },
+    entregada:          { bg: '#dcfce7', color: 'var(--c-success)' },
+    rechazada:          { bg: '#fee2e2', color: 'var(--c-danger)' },
   }
 
-  if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>Cargando...</div>
+  if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--c-text3)' }}>Cargando...</div>
 
   return (
     <div>
       {/* Encabezado */}
       {meta && (
-        <div style={{ marginBottom: '20px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: '#555' }}>
-          {meta.proyecto    && <span><b style={{ color: '#999' }}>Proyecto:</b> {meta.proyecto}</span>}
-          {meta.nombre_obra && <span><b style={{ color: '#999' }}>Obra:</b> {meta.nombre_obra}</span>}
-          {meta.fecha       && <span><b style={{ color: '#999' }}>Fecha:</b> {meta.fecha}</span>}
+        <div style={{ marginBottom: '20px', display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--c-text2)' }}>
+          {meta.proyecto    && <span><b style={{ color: 'var(--c-text3)' }}>Proyecto:</b> {meta.proyecto}</span>}
+          {meta.nombre_obra && <span><b style={{ color: 'var(--c-text3)' }}>Obra:</b> {meta.nombre_obra}</span>}
+          {meta.fecha       && <span><b style={{ color: 'var(--c-text3)' }}>Fecha:</b> {meta.fecha}</span>}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
-            {filaDolar?.precio_unitario && <span style={{ fontSize: '13px', color: '#666' }}>U$S: <b>${Number(filaDolar.precio_unitario).toLocaleString('es-AR')}</b></span>}
-            {filaTotal?.subtotal && <span style={{ fontWeight: '700', fontSize: '15px', color: '#2563eb' }}>Total: ${Number(filaTotal.subtotal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
+            {filaDolar?.precio_unitario && <span style={{ fontSize: '13px', color: 'var(--c-text2)' }}>U$S: <b>${Number(filaDolar.precio_unitario).toLocaleString('es-AR')}</b></span>}
+            {filaTotal?.subtotal && <span style={{ fontWeight: '700', fontSize: '15px', color: 'var(--c-gold)' }}>Total: ${Number(filaTotal.subtotal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>}
           </span>
         </div>
       )}
 
       {/* Upload admin */}
       {esAdmin && (
-        <div style={{ marginBottom: '20px', padding: '16px 20px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: '20px', padding: '16px 20px', background: 'var(--c-surface2)', border: '1px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '200px' }}>
             <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '2px' }}>{filas.length > 0 ? '🔄 Reemplazar Excel' : '📤 Subir Excel de Explosión de Insumos'}</div>
-            <div style={{ fontSize: '12px', color: '#888' }}>Archivos .xlsx o .xls</div>
+            <div style={{ fontSize: '12px', color: 'var(--c-text3)' }}>Archivos .xlsx o .xls</div>
           </div>
           <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={handleArchivo} style={{ display: 'none' }} id="upload-ei" />
-          <label htmlFor="upload-ei" style={{ padding: '8px 20px', background: '#2563eb', color: 'white', borderRadius: '6px', cursor: subiendo ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px', opacity: subiendo ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+          <label htmlFor="upload-ei" style={{ padding: '8px 20px', background: 'var(--c-gold)', color: 'white', borderRadius: '6px', cursor: subiendo ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px', opacity: subiendo ? 0.6 : 1, whiteSpace: 'nowrap' }}>
             {subiendo ? 'Procesando...' : 'Elegir archivo'}
           </label>
         </div>
@@ -389,7 +389,7 @@ function ExplosionInsumos({ obra, perfil }) {
           {['pedido', 'stock', 'historial'].map((v, i) => (
             <button key={v}
               onClick={() => { setVistaJefe(vistaJefe === v ? null : v); if (v === 'historial') cargarHistorial() }}
-              style={{ padding: '10px 20px', background: vistaJefe === v ? '#2563eb' : 'white', color: vistaJefe === v ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+              style={{ padding: '10px 20px', background: vistaJefe === v ? 'var(--c-gold)' : 'white', color: vistaJefe === v ? 'white' : 'var(--c-gold)', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
               {['🛒 Cargar Pedido', '📦 Ver Stock', '📋 Historial'][i]}
             </button>
           ))}
@@ -402,20 +402,20 @@ function ExplosionInsumos({ obra, perfil }) {
           {['gestionar', 'stock', 'historial'].map((v, i) => (
             <button key={v}
               onClick={() => { setVistaCompras(vistaCompras === v ? null : v); if (v === 'historial') cargarHistorial(); if (v === 'gestionar') cargarSolicitudes() }}
-              style={{ padding: '10px 20px', background: vistaCompras === v ? '#2563eb' : 'white', color: vistaCompras === v ? 'white' : '#2563eb', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+              style={{ padding: '10px 20px', background: vistaCompras === v ? 'var(--c-gold)' : 'white', color: vistaCompras === v ? 'white' : 'var(--c-gold)', border: '1px solid #2563eb', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
               {['📋 Gestionar Solicitudes', '📦 Ver Stock', '🗂 Historial'][i]}
             </button>
           ))}
         </div>
       )}
 
-      {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#dc2626', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
-      {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: '#16a34a', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
+      {error && <div style={{ padding: '10px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: 'var(--c-danger)', marginBottom: '16px', fontSize: '14px' }}>⚠️ {error}</div>}
+      {exito && <div style={{ padding: '10px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', color: 'var(--c-success)', marginBottom: '16px', fontSize: '14px' }}>✓ {exito}</div>}
 
       {/* Vista Cargar Pedido (jefe) */}
       {esJefe && vistaJefe === 'pedido' && (
-        <div style={{ marginBottom: '24px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Nueva Solicitud de Compra</h4>
+        <div style={{ marginBottom: '24px', background: 'var(--c-surface2)', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '20px' }}>
+          <h4 style={{ margin: '0 0 16px', color: 'var(--c-text)' }}>Nueva Solicitud de Compra</h4>
           {pedidoItems.length > 0 && (
             <div style={{ marginBottom: '16px' }}>
               {pedidoItems.map((p, i) => (
@@ -430,12 +430,12 @@ function ExplosionInsumos({ obra, perfil }) {
                         style={{ width: '70px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px' }} />
                     </>
                   ) : (
-                    <span style={{ flex: 2, fontSize: '13px' }}>{p.descripcion} <span style={{ color: '#888' }}>({p.unidad})</span></span>
+                    <span style={{ flex: 2, fontSize: '13px' }}>{p.descripcion} <span style={{ color: 'var(--c-text3)' }}>({p.unidad})</span></span>
                   )}
                   <input type="number" min="0.01" max={p.cantidad_max || undefined} value={p.cantidad}
                     onChange={ev => actualizarCantidad(p.insumo_id, ev.target.value)}
                     style={{ width: '80px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', textAlign: 'right' }} />
-                  <button onClick={() => quitarItem(p.insumo_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>✕</button>
+                  <button onClick={() => quitarItem(p.insumo_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-danger)', fontSize: '16px' }}>✕</button>
                 </div>
               ))}
             </div>
@@ -445,13 +445,13 @@ function ExplosionInsumos({ obra, perfil }) {
             <option value="">+ Agregar insumo de la explosión...</option>
             {insumos.map(f => <option key={f.id} value={f.id}>{f.descripcion} ({f.unidad})</option>)}
           </select>
-          <button onClick={agregarOtro} style={{ padding: '7px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', color: '#555', marginBottom: '12px' }}>
+          <button onClick={agregarOtro} style={{ padding: '7px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', color: 'var(--c-text2)', marginBottom: '12px' }}>
             + Agregar otro (no previsto)
           </button>
           <textarea placeholder="Observaciones (opcional)" value={observaciones} onChange={ev => setObservaciones(ev.target.value)} rows={2}
             style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', marginBottom: '12px', boxSizing: 'border-box', resize: 'vertical' }} />
           <button onClick={enviarPedido} disabled={pedidoItems.length === 0 || enviando}
-            style={{ padding: '10px 24px', background: pedidoItems.length === 0 ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: pedidoItems.length === 0 ? 'not-allowed' : 'pointer' }}>
+            style={{ padding: '10px 24px', background: pedidoItems.length === 0 ? 'var(--c-border2)' : 'var(--c-gold)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: pedidoItems.length === 0 ? 'not-allowed' : 'pointer' }}>
             {enviando ? 'Enviando...' : 'Enviar Solicitud'}
           </button>
         </div>
@@ -460,27 +460,27 @@ function ExplosionInsumos({ obra, perfil }) {
       {/* Vista Gestionar Solicitudes (compras) */}
       {esCompras && vistaCompras === 'gestionar' && (
         <div style={{ marginBottom: '24px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Solicitudes de Compra</h4>
+          <h4 style={{ margin: '0 0 16px', color: 'var(--c-text)' }}>Solicitudes de Compra</h4>
           {solicitudes.length === 0 ? (
-            <p style={{ color: '#aaa' }}>No hay solicitudes aún.</p>
+            <p style={{ color: 'var(--c-text3)' }}>No hay solicitudes aún.</p>
           ) : solicitudes.map(s => {
-            const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: '#666' }
+            const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: 'var(--c-text2)' }
             return (
               <div key={s.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                  <span style={{ fontWeight: '700', color: '#1e3a5f', fontSize: '15px' }}>SC-{String(s.numero).padStart(3, '0')}</span>
-                  <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
+                  <span style={{ fontWeight: '700', color: 'var(--c-text)', fontSize: '15px' }}>SC-{String(s.numero).padStart(3, '0')}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--c-text3)' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
                   <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
                   {/* Botones de cambio de estado - solo compras */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {s.estado === 'pendiente' && (
                       <>
                         <button onClick={() => cambiarEstado(s.id, 'aprobada')}
-                          style={{ padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          style={{ padding: '4px 12px', background: 'var(--c-gold)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
                           Aprobar
                         </button>
                         <button onClick={() => cambiarEstado(s.id, 'rechazada')}
-                          style={{ padding: '4px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          style={{ padding: '4px 12px', background: 'var(--c-danger)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
                           Rechazar
                         </button>
                       </>
@@ -488,12 +488,12 @@ function ExplosionInsumos({ obra, perfil }) {
                   </div>
                 </div>
                 {s.solicitud_items?.map(it => (
-                  <div key={it.id} style={{ fontSize: '13px', color: '#555', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div key={it.id} style={{ fontSize: '13px', color: 'var(--c-text2)', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
                     {it.descripcion} — <b>{it.cantidad} {it.unidad}</b>
-                    {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#2563eb' }}>no previsto</span>}
+                    {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--c-gold)' }}>no previsto</span>}
                   </div>
                 ))}
-                {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#888' }}>Obs: {s.observaciones}</p>}
+                {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--c-text3)' }}>Obs: {s.observaciones}</p>}
               </div>
             )
           })}
@@ -503,11 +503,11 @@ function ExplosionInsumos({ obra, perfil }) {
       {/* Vista Stock (jefe y compras) */}
       {(vistaJefe === 'stock' || vistaCompras === 'stock') && (
         <div style={{ marginBottom: '24px' }}>
-          <h4 style={{ margin: '0 0 16px', color: '#1e3a5f' }}>Stock Disponible</h4>
+          <h4 style={{ margin: '0 0 16px', color: 'var(--c-text)' }}>Stock Disponible</h4>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                <tr style={{ background: 'var(--c-text)', color: 'white' }}>
                   {['Descripción', 'Unid.', 'Cant. Original', 'Cant. Pedida', 'Disponible'].map(h => (
                     <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Descripción' ? 'left' : 'right', fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
@@ -518,12 +518,12 @@ function ExplosionInsumos({ obra, perfil }) {
                   const pedida     = f.cantidad_pedida || 0
                   const disponible = (f.cantidad || 0) - pedida
                   return (
-                    <tr key={fi} style={{ background: fi % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={fi} style={{ background: fi % 2 === 0 ? '#ffffff' : 'var(--c-surface2)', borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '7px 12px' }}>{f.descripcion}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', color: '#888' }}>{f.unidad}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--c-text3)' }}>{f.unidad}</td>
                       <td style={{ padding: '7px 12px', textAlign: 'right' }}>{Number(f.cantidad || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', color: pedida > 0 ? '#dc2626' : '#888' }}>{Number(pedida).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: disponible < 0 ? '#dc2626' : disponible === 0 ? '#ca8a04' : '#16a34a' }}>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', color: pedida > 0 ? 'var(--c-danger)' : '#888' }}>{Number(pedida).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: '600', color: disponible < 0 ? 'var(--c-danger)' : disponible === 0 ? '#ca8a04' : 'var(--c-success)' }}>
                         {Number(disponible).toLocaleString('es-AR', { maximumFractionDigits: 2 })}
                       </td>
                     </tr>
@@ -539,22 +539,22 @@ function ExplosionInsumos({ obra, perfil }) {
       {(vistaJefe === 'historial' || vistaCompras === 'historial') && (
         <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0, color: '#1e3a5f' }}>Historial de Solicitudes</h4>
+            <h4 style={{ margin: 0, color: 'var(--c-text)' }}>Historial de Solicitudes</h4>
             <button onClick={descargarExcel}
-              style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+              style={{ padding: '8px 16px', background: 'var(--c-gold)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
               ⬇ Descargar Excel
             </button>
           </div>
           {historial.length === 0 ? (
-            <p style={{ color: '#aaa' }}>No hay solicitudes aún.</p>
+            <p style={{ color: 'var(--c-text3)' }}>No hay solicitudes aún.</p>
           ) : historial.map(s => {
-            const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: '#666' }
+            const ec = estadoColor[s.estado] || { bg: '#f3f4f6', color: 'var(--c-text2)' }
             return (
               <div key={s.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                  <span style={{ fontWeight: '700', color: '#1e3a5f' }}>SC-{String(s.numero).padStart(3, '0')}</span>
+                  <span style={{ fontWeight: '700', color: 'var(--c-text)' }}>SC-{String(s.numero).padStart(3, '0')}</span>
                   <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: ec.bg, color: ec.color }}>{s.estado}</span>
-                  <span style={{ fontSize: '12px', color: '#999' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--c-text3)' }}>{new Date(s.created_at).toLocaleDateString('es-AR')}</span>
                   {/* Botones de entrega - solo jefe de obra */}
                   {esJefe && (
                     <div style={{ display: 'flex', gap: '6px' }}>
@@ -565,14 +565,14 @@ function ExplosionInsumos({ obra, perfil }) {
                             Entrega Parcial
                           </button>
                           <button onClick={() => cambiarEstado(s.id, 'entregada')}
-                            style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                            style={{ padding: '4px 12px', background: 'var(--c-success)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
                             Entregada
                           </button>
                         </>
                       )}
                       {s.estado === 'entrega parcial' && (
                         <button onClick={() => cambiarEstado(s.id, 'entregada')}
-                          style={{ padding: '4px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                          style={{ padding: '4px 12px', background: 'var(--c-success)', color: 'white', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
                           Entregada
                         </button>
                       )}
@@ -580,12 +580,12 @@ function ExplosionInsumos({ obra, perfil }) {
                   )}
                 </div>
                 {s.solicitud_items?.map(it => (
-                  <div key={it.id} style={{ fontSize: '13px', color: '#555', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div key={it.id} style={{ fontSize: '13px', color: 'var(--c-text2)', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
                     {it.descripcion} — <b>{it.cantidad} {it.unidad}</b>
-                    {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#2563eb' }}>no previsto</span>}
+                    {it.es_otro && <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--c-gold)' }}>no previsto</span>}
                   </div>
                 ))}
-                {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#888' }}>Obs: {s.observaciones}</p>}
+                {s.observaciones && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--c-text3)' }}>Obs: {s.observaciones}</p>}
               </div>
             )
           })}
@@ -594,14 +594,14 @@ function ExplosionInsumos({ obra, perfil }) {
 
       {/* Tabla de insumos */}
       {filas.length === 0 ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: '#aaa', fontSize: '15px' }}>
+        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--c-text3)', fontSize: '15px' }}>
           {esAdmin ? 'Subí el Excel para ver la explosión de insumos.' : 'Aún no se cargó la explosión de insumos para esta obra.'}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
-              <tr style={{ background: '#1e3a5f', color: 'white' }}>
+              <tr style={{ background: 'var(--c-text)', color: 'white' }}>
                 {['Descripción', 'Unid.', 'P. Unitario', 'Cantidad', 'Subtotal', 'Incidencia', 'Fecha'].map(h => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Descripción' ? 'left' : 'right', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '12px' }}>{h}</th>
                 ))}
@@ -611,11 +611,11 @@ function ExplosionInsumos({ obra, perfil }) {
               {grupos.map((g, gi) => (
                 <React.Fragment key={'grupo-' + gi}>
                   {g.encabezado && (
-                    <tr style={{ background: '#dbeafe' }}>
-                      <td colSpan={4} style={{ padding: '8px 12px', fontWeight: '700', color: '#1e3a5f', fontSize: '13px' }}>
+                    <tr style={{ background: 'var(--c-gold-dim)' }}>
+                      <td colSpan={4} style={{ padding: '8px 12px', fontWeight: '700', color: 'var(--c-text)', fontSize: '13px' }}>
                         {g.encabezado.descripcion}
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: '#1e3a5f', fontSize: '13px' }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '700', color: 'var(--c-text)', fontSize: '13px' }}>
                         {g.encabezado.subtotal ? fmt(g.encabezado.subtotal) : ''}
                       </td>
                       <td colSpan={2} />
@@ -627,7 +627,7 @@ function ExplosionInsumos({ obra, perfil }) {
                     const esDolar    = f.tipo === 'dolar'
                     return (
                       <tr key={fi} style={{
-                        background: esTotal ? '#1e3a5f' : esDolar || esSubtotal ? '#f1f5f9' : fi % 2 === 0 ? '#ffffff' : '#f9fafb',
+                        background: esTotal ? 'var(--c-text)' : esDolar || esSubtotal ? 'var(--c-border)' : fi % 2 === 0 ? '#ffffff' : 'var(--c-surface2)',
                         borderBottom: esSubtotal ? '2px solid #cbd5e1' : '1px solid #f1f5f9'
                       }}>
                         <td style={{ padding: '7px 12px', fontWeight: (esSubtotal || esTotal || esDolar) ? '700' : '400', color: esTotal ? 'white' : 'inherit' }}>
@@ -642,7 +642,7 @@ function ExplosionInsumos({ obra, perfil }) {
                         <td style={{ padding: '7px 12px', textAlign: 'right', color: esTotal ? 'white' : 'inherit' }}>
                           {esSubtotal || esTotal || esDolar ? '' : fmt(f.cantidad)}
                         </td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: (esSubtotal || esTotal || esDolar) ? '700' : '400', color: esTotal ? 'white' : esSubtotal ? '#1e3a5f' : '#111' }}>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: (esSubtotal || esTotal || esDolar) ? '700' : '400', color: esTotal ? 'white' : esSubtotal ? 'var(--c-text)' : '#111' }}>
                           {fmt(f.subtotal)}
                         </td>
                         <td style={{ padding: '7px 12px', textAlign: 'right', color: esTotal ? 'white' : '#888' }}>
